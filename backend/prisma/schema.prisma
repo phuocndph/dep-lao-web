@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum ZaloAccountStatus {
+  INACTIVE
+  QR_PENDING
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum ThreadType {
+  USER
+  GROUP
+}
+
+enum ContentType {
+  TEXT
+  IMAGE
+  VIDEO
+  FILE
+  STICKER
+}
+
+enum CampaignType {
+  SEND_MESSAGE
+  ADD_FRIEND
+  BROADCAST
+}
+
+enum CampaignStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+enum RecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users        User[]
+  zaloAccounts ZaloAccount[]
+  contacts     Contact[]
+  labels       Label[]
+  messages     Message[]
+  campaigns    Campaign[]
+  workflows    Workflow[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  role         UserRole @default(EMPLOYEE)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sessions UserSession[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model UserSession {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  refreshToken String   @unique @map("refresh_token")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
+}
+
+model ZaloAccount {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String            @map("tenant_id") @db.Uuid
+  zaloUid     String            @map("zalo_uid")
+  phone       String?
+  displayName String?           @map("display_name")
+  avatarUrl   String?           @map("avatar_url")
+  status      ZaloAccountStatus @default(INACTIVE)
+  sortOrder   Int               @default(0) @map("sort_order")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentials AccountCredentials?
+  settings    AccountSettings?
+  messages    Message[]
+  campaigns   Campaign[]
+
+  @@index([tenantId, status])
+  @@map("zalo_accounts")
+}
+
+model AccountCredentials {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId     String   @unique @map("account_id") @db.Uuid
+  encryptedData String   @map("encrypted_data")
+  imei          String?
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_credentials")
+}
+
+model AccountSettings {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  accountId        String   @unique @map("account_id") @db.Uuid
+  autoReply        Boolean  @default(false) @map("auto_reply")
+  autoReplyText    String?  @map("auto_reply_text")
+  maxMsgPerMinute  Int      @default(20) @map("max_msg_per_minute")
+  maxFriendPerDay  Int      @default(15) @map("max_friend_per_day")
+  extraSettings    Json     @default("{}") @map("extra_settings")
+
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@map("account_settings")
+}
+
+model Contact {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  zaloUid     String   @map("zalo_uid")
+  phone       String?
+  displayName String?  @map("display_name")
+  realName    String?  @map("real_name")
+  avatarUrl   String?  @map("avatar_url")
+  notes       String?
+  source      String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  labels     ContactLabel[]
+  messages   Message[]
+  recipients CampaignRecipient[]
+
+  @@unique([tenantId, zaloUid])
+  @@index([tenantId, phone])
+  @@map("contacts")
+}
+
+model Label {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String
+  color     String   @default("#6366f1")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts ContactLabel[]
+
+  @@unique([tenantId, name])
+  @@map("labels")
+}
+
+model ContactLabel {
+  contactId String @map("contact_id") @db.Uuid
+  labelId   String @map("label_id") @db.Uuid
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  label   Label   @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, labelId])
+  @@map("contact_labels")
+}
+
+model Message {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String           @map("tenant_id") @db.Uuid
+  accountId   String           @map("account_id") @db.Uuid
+  contactId   String?          @map("contact_id") @db.Uuid
+  zaloMsgId   String           @map("zalo_msg_id")
+  direction   MessageDirection
+  threadType  ThreadType       @map("thread_type")
+  threadId    String           @map("thread_id")
+  contentType ContentType      @map("content_type") @default(TEXT)
+  content     String?
+  mediaUrl    String?          @map("media_url")
+  extraData   Json             @default("{}") @map("extra_data")
+  isRead      Boolean          @default(false) @map("is_read")
+  sentAt      DateTime         @map("sent_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  contact Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([accountId, zaloMsgId])
+  @@index([tenantId, threadId, sentAt(sort: Desc)])
+  @@index([tenantId, accountId, sentAt(sort: Desc)])
+  @@index([tenantId, isRead])
+  @@map("messages")
+}
+
+model Campaign {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String         @map("tenant_id") @db.Uuid
+  accountId   String?        @map("account_id") @db.Uuid
+  name        String
+  type        CampaignType
+  status      CampaignStatus @default(DRAFT)
+  messageText String?        @map("message_text")
+  totalCount  Int            @default(0) @map("total_count")
+  sentCount   Int            @default(0) @map("sent_count")
+  failedCount Int            @default(0) @map("failed_count")
+  config      Json           @default("{}")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account    ZaloAccount?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  recipients CampaignRecipient[]
+
+  @@map("campaigns")
+}
+
+model CampaignRecipient {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaignId String          @map("campaign_id") @db.Uuid
+  contactId  String?         @map("contact_id") @db.Uuid
+  phone      String?
+  status     RecipientStatus @default(PENDING)
+  sentAt     DateTime?       @map("sent_at")
+  error      String?
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact  Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, status])
+  @@map("campaign_recipients")
+}
+
+model Workflow {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  name          String
+  isActive      Boolean   @default(false) @map("is_active")
+  flowJson      Json      @map("flow_json")
+  triggerConfig Json      @map("trigger_config")
+  lastRunAt     DateTime? @map("last_run_at")
+  runCount      Int       @default(0) @map("run_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("workflows")
+}
+
+model VaultAuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event     String
+  accountId String?  @map("account_id")
+  tenantId  String?  @map("tenant_id")
+  actor     String?
+  details   Json     @default("{}")
+  ts        BigInt
+  hmac      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("vault_audit_logs")
+}
