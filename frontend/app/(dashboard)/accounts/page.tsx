@@ -1,10 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, X, RefreshCw, Trash2, Wifi, WifiOff, QrCode } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Wifi, WifiOff, QrCode } from 'lucide-react'
 import Header from '@/components/layout/header'
 import Button from '@/components/ui/button'
-import Input from '@/components/ui/input'
 import Badge from '@/components/ui/badge'
 import Spinner from '@/components/ui/spinner'
 import { useAccountsStore, ZaloAccount } from '@/stores/accounts.store'
@@ -28,8 +27,10 @@ const STATUS_BADGE: Record<ZaloAccount['status'], 'green' | 'yellow' | 'blue' | 
 }
 
 function QrModal() {
-  const { qrModal, setQrModal } = useAccountsStore()
+  const { qrModal, setQrModal, removeAccount, addAccount } = useAccountsStore()
   const [countdown, setCountdown] = useState(120)
+  const [refreshing, setRefreshing] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     if (!qrModal?.open) return
@@ -40,36 +41,61 @@ function QrModal() {
 
   if (!qrModal?.open) return null
 
+  const handleCancel = async () => {
+    const accountId = qrModal.accountId
+    setCancelling(true)
+    setQrModal(null)
+    try {
+      await removeAccount(accountId)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    const oldAccountId = qrModal.accountId
+    try {
+      await removeAccount(oldAccountId)
+      const account = await addAccount()
+      joinAccountRoom(account.id)
+      setQrModal({ open: true, accountId: account.id, qrDataUrl: '' })
+      setCountdown(120)
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="relative w-80 rounded-2xl bg-white p-6 shadow-xl">
-        <button
-          onClick={() => setQrModal(null)}
-          className="absolute right-4 top-4 text-gray-400 hover:text-gray-600"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
         <div className="mb-4 flex items-center gap-2">
           <QrCode className="h-5 w-5 text-blue-600" />
-          <h2 className="text-base font-semibold text-gray-900">Quét mã QR</h2>
+          <h2 className="text-base font-semibold text-gray-900">Quét mã QR bằng Zalo</h2>
         </div>
 
         {qrModal.qrDataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={qrModal.qrDataUrl}
+            src={
+              qrModal.qrDataUrl.startsWith('data:')
+                ? qrModal.qrDataUrl
+                : `data:image/png;base64,${qrModal.qrDataUrl}`
+            }
             alt="Zalo QR Code"
-            className="mx-auto h-56 w-56 rounded-lg border border-gray-100"
+            width={240}
+            height={240}
+            className="mx-auto h-60 w-60 rounded-lg border border-gray-100"
           />
         ) : (
-          <div className="flex h-56 w-56 mx-auto items-center justify-center">
+          <div className="flex h-60 w-60 mx-auto flex-col items-center justify-center gap-3">
             <Spinner size="lg" />
+            <p className="text-xs text-gray-400">Đang tạo mã QR...</p>
           </div>
         )}
 
         <p className="mt-4 text-center text-sm text-gray-600">
-          Mở <span className="font-medium">Zalo</span> → Quét mã QR
+          Mở <span className="font-medium">Zalo</span> → Quét mã → Đăng nhập
         </p>
 
         <div className="mt-3 flex items-center justify-center gap-2 text-xs text-gray-400">
@@ -79,13 +105,24 @@ function QrModal() {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => setCountdown(120)}
+              loading={refreshing}
+              onClick={handleRefresh}
               className="gap-1"
             >
-              <RefreshCw className="h-3 w-3" /> Làm mới QR
+              <RefreshCw className="h-3 w-3" /> Làm mới
             </Button>
           )}
         </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          loading={cancelling}
+          className="mt-3 w-full text-gray-500"
+          onClick={handleCancel}
+        >
+          Hủy
+        </Button>
       </div>
     </div>
   )
@@ -93,11 +130,9 @@ function QrModal() {
 
 export default function AccountsPage() {
   const { user } = useAuthStore()
-  const { accounts, isLoading, fetchAccounts, addAccount, removeAccount, updateStatus, setQrModal } =
+  const { accounts, isLoading, fetchAccounts, addAccount, removeAccount, updateStatus, updateAccountInfo, setQrModal } =
     useAccountsStore()
-  const [phone, setPhone] = useState('')
   const [adding, setAdding] = useState(false)
-  const [showInput, setShowInput] = useState(false)
   const [addError, setAddError] = useState('')
 
   useEffect(() => {
@@ -112,8 +147,8 @@ export default function AccountsPage() {
     socket.on('qr:update', (data: { accountId: string; qrDataUrl: string }) => {
       setQrModal({ open: true, accountId: data.accountId, qrDataUrl: data.qrDataUrl })
     })
-    socket.on('account:connected', (data: { accountId: string }) => {
-      updateStatus({ accountId: data.accountId, status: 'connected' })
+    socket.on('account:connected', (data: { accountId: string; displayName?: string; phone?: string | null }) => {
+      updateAccountInfo({ accountId: data.accountId, status: 'connected', displayName: data.displayName ?? null, phone: data.phone ?? null })
       setQrModal(null)
     })
 
@@ -122,26 +157,25 @@ export default function AccountsPage() {
       socket.off('qr:update')
       socket.off('account:connected')
     }
-  }, [updateStatus, setQrModal])
+  }, [updateStatus, updateAccountInfo, setQrModal])
 
   useEffect(() => {
     return handleSocketEvents()
   }, [handleSocketEvents])
 
   const handleAdd = async () => {
-    if (!phone.trim()) return
     setAdding(true)
     setAddError('')
     try {
-      const account = await addAccount(phone.trim())
+      const account = await addAccount()
+      if (!account?.id) throw new Error('Server không trả về account id')
       joinAccountRoom(account.id)
-      setPhone('')
-      setShowInput(false)
+      setQrModal({ open: true, accountId: account.id, qrDataUrl: '' })
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Thêm tài khoản thất bại'
-      setAddError(Array.isArray(msg) ? msg[0] : msg)
+        (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message ??
+        (err instanceof Error ? err.message : 'Không thể thêm tài khoản')
+      setAddError(Array.isArray(msg) ? msg[0] : String(msg))
     } finally {
       setAdding(false)
     }
@@ -154,40 +188,16 @@ export default function AccountsPage() {
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-gray-500">{accounts.length} tài khoản</p>
-          <Button size="sm" onClick={() => setShowInput((v) => !v)} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            Thêm tài khoản
-          </Button>
-        </div>
-
-        {showInput && (
-          <div className="mb-6 flex items-end gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
-            <div className="flex-1">
-              <Input
-                label="Số điện thoại"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="0901234567"
-                onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                error={addError}
-                autoFocus
-              />
-            </div>
-            <Button loading={adding} onClick={handleAdd} size="sm">
-              Thêm
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setShowInput(false)
-                setAddError('')
-              }}
-            >
-              <X className="h-4 w-4" />
+          <div className="flex items-center gap-3">
+            {addError && (
+              <p className="text-xs text-red-500 max-w-xs text-right">{addError}</p>
+            )}
+            <Button size="sm" loading={adding} onClick={handleAdd} className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Thêm tài khoản
             </Button>
           </div>
-        )}
+        </div>
 
         {isLoading ? (
           <div className="flex justify-center py-20">
@@ -230,6 +240,8 @@ function AccountCard({
     }
   }
 
+  const label = account.displayName || account.phone || 'Chưa kết nối'
+
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between">
@@ -240,8 +252,8 @@ function AccountCard({
             <WifiOff className="h-4 w-4 text-gray-400" />
           )}
           <div>
-            <p className="text-sm font-medium text-gray-900">{account.displayName || account.phone}</p>
-            {account.displayName && (
+            <p className="text-sm font-medium text-gray-900">{label}</p>
+            {account.displayName && account.phone && (
               <p className="text-xs text-gray-500">{account.phone}</p>
             )}
           </div>

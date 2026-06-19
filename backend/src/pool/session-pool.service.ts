@@ -64,7 +64,7 @@ export class SessionPoolService {
 
   async addAccount(params: {
     accountId: string
-    phone: string
+    phone: string | null
     tenantId: string
     vaultTokenId?: string
   }): Promise<SessionRecord> {

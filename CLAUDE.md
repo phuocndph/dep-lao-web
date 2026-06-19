@@ -218,10 +218,72 @@ Migration hiện tại: add_user_sessions (applied via prisma db push)
 - Auth flow: register → login → dashboard → logout
 - Socket.io: namespace /zalo, autoConnect:false, connect sau login
 - CORS: backend main.ts enableCors origin:localhost:3000
-- Ring buffer 500 tin nhắn trong chat.store.ts
 - Chạy: cd frontend && npm run dev
+
+### chat.store.ts — thread-based (không còn flat array)
+
+- `threads: Record<threadId, Thread>` — mỗi thread là 1 conversation
+- `addIncomingMessage({ accountId, message })` — nhận payload từ `message:new` socket
+- `addOutboundMessage(msg)` + `updateOutboundStatus(tempId, threadId, status)` — optimistic send
+- `selectThread(threadId)` — reset unreadCount về 0
+
+### inbox/page.tsx — 2-column chat UI
+
+- **Cột trái (320px):** thread list, search, unread badge, account badge (SĐT Zalo nào handle)
+- **Cột phải:** conversation header, message bubbles (inbound trái/trắng, outbound phải/xanh), nhóm theo ngày ("Hôm nay"/"Hôm qua"/DD/MM/YYYY), auto-scroll
+- **Input bar:** Enter gửi, Shift+Enter xuống dòng, optimistic update + rollback nếu lỗi
+- **Room joining:** join tất cả account rooms (không phải chỉ connected) + re-join khi socket reconnect
+
+---
 
 ## Bug đã fix
 
 - CORS: app.enableCors({ origin:'http://localhost:3000', credentials:true })
 - Password minLength: 8 (khớp backend DTO)
+- QR modal không hiện: `createAccount` trả `{ accountId }` thay vì `{ id }` → frontend dùng `account.id` bị `undefined` → `joinAccountRoom(undefined)` join room sai
+- QR race condition: QR event có thể fire trước khi client join room → gateway giờ replay `qr:update` ngay khi client join nếu session đang `qr_pending` và có `lastQrDataUrl`
+- POST /api/accounts trả 400 khi body rỗng `{}`: `@IsNotEmpty()` còn sót trong DTO → đã bỏ hoàn toàn
+- Inbox không nhận tin realtime: 3 root causes — (1) `CreateAccountDto.phone` required → 400 khi POST body rỗng → account không tạo được; (2) `createAccount` trả `{ accountId }` → `joinAccountRoom(undefined)` sai room; (3) inbox chỉ join rooms cho `status=connected` → miss messages khi session đang restore sau backend restart
+- Socket room bị mất khi reconnect: inbox giờ listen `connect` event để re-join tất cả rooms
+
+---
+
+## Decisions đã chốt (bổ sung)
+
+| Quyết định | Lý do |
+|-----------|-------|
+| `SessionRecord.lastQrDataUrl` lưu QR mới nhất | Gateway replay QR khi client join room muộn (race condition) |
+| `SessionPoolService.getSession(id)` public | Gateway cần check session state trong `handleJoinRoom` |
+| `createAccount` trả `AccountListItem` shape (có `id`) | Frontend store dùng `account.id` để `joinAccountRoom` |
+| Email unique per tenant (không global) | Multi-tenant: cùng email có thể dùng ở nhiều workspace khác nhau |
+| Login yêu cầu `tenantSlug` | Phân biệt user cùng email ở các tenant khác nhau |
+| `CreateAccountDto.phone` optional (không require) | UX mới: QR hiện ngay, phone lấy từ Zalo sau khi login |
+| `SessionRecord.phone: string \| null` | Account tạo trước khi biết phone từ Zalo |
+| `WorkerEventLoginSuccess.payload.phone?: string` | zca-js có thể không trả phone — để null nếu không có |
+| LOGIN_SUCCESS → Prisma update ZaloAccount | Ghi `zaloUid`, `displayName`, `phone`, `status=CONNECTED` sau khi worker login xong |
+| `SessionPoolService` inject `PrismaService` | Pool cần update DB khi LOGIN_SUCCESS |
+| `account:connected` socket event trả thêm `phone` | Frontend cần cập nhật card sau khi kết nối |
+| `addAccount()` store không nhận args | Phone không còn được user nhập |
+| `updateAccountInfo()` trong accounts.store | Cập nhật displayName + phone từ `account:connected` event |
+| Inbox join tất cả rooms (không filter `connected`) | Session đang restore chưa về `connected` → filter gây miss messages |
+| Re-join rooms khi socket `connect` event | Server-side rooms bị xóa khi disconnect — phải rejoin sau reconnect |
+| `chat.store.ts` dùng `threads` map thay flat array | Thread-based cho phép group by conversation, unread count per thread |
+
+---
+
+## UX Flow — Thêm tài khoản (đã thay đổi)
+
+**Cũ:** User nhập SĐT → Submit → Đợi → QR hiện
+
+**Mới:**
+1. Click "+ Thêm tài khoản" → POST /api/accounts (body rỗng)
+2. Nhận `{ id }` → `joinAccountRoom(id)` → Mở QR modal với spinner
+3. Khi `qr:update` socket fire → thay spinner bằng QR image
+4. Khi `account:connected` fire → đóng modal, update card với displayName + phone từ Zalo
+5. QR modal có: countdown 120s, nút "Làm mới" (tạo account mới), nút "Hủy" (DELETE account)
+
+---
+
+## Known issues (chưa fix)
+
+- `DELETE /api/accounts/:id` với UUID format sai → 500 thay vì 404 (Prisma ném `PrismaClientValidationError`, `mapError` chưa bắt)

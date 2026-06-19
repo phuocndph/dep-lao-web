@@ -1,9 +1,9 @@
-import { IsString, IsNotEmpty, IsOptional } from 'class-validator'
+import { IsString, IsOptional } from 'class-validator'
 
 export class CreateAccountDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  phone!: string
+  phone?: string
 
   @IsOptional()
   @IsString()

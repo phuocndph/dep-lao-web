@@ -48,15 +48,15 @@ export class ZaloController {
   async createAccount(
     @Body() dto: CreateAccountDto,
     @Req() req: RequestWithUser,
-  ): Promise<{ accountId: string; status: string }> {
+  ): Promise<AccountListItem> {
     try {
       const { tenantId } = req.user
       const account = await this.prisma.zaloAccount.create({
-        data: { tenantId, zaloUid: '', phone: dto.phone, displayName: dto.displayName, status: 'INACTIVE' },
+        data: { tenantId, zaloUid: '', phone: dto.phone ?? null, displayName: dto.displayName ?? null, status: 'INACTIVE' },
       })
 
-      await this.pool.addAccount({ accountId: account.id, phone: dto.phone, tenantId })
-      return { accountId: account.id, status: 'qr_pending' }
+      await this.pool.addAccount({ accountId: account.id, phone: dto.phone ?? null, tenantId })
+      return { id: account.id, phone: account.phone, displayName: account.displayName, status: 'qr_pending', unreadCount: 0 }
     } catch (err) {
       throw this.mapError(err)
     }

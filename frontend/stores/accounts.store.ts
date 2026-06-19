@@ -5,8 +5,8 @@ import apiClient from '@/lib/api-client'
 
 export interface ZaloAccount {
   id: string
-  phone: string
-  displayName: string
+  phone: string | null
+  displayName: string | null
   status: 'connected' | 'qr_pending' | 'cookie_pending' | 'error' | 'inactive'
   connectedAt: string | null
 }
@@ -22,9 +22,10 @@ interface AccountsState {
   isLoading: boolean
   qrModal: QrModal | null
   fetchAccounts: (tenantId: string) => Promise<void>
-  addAccount: (phone: string) => Promise<ZaloAccount>
+  addAccount: () => Promise<ZaloAccount>
   removeAccount: (id: string) => Promise<void>
   updateStatus: (data: { accountId: string; status: ZaloAccount['status'] }) => void
+  updateAccountInfo: (data: { accountId: string; displayName?: string | null; phone?: string | null; status?: ZaloAccount['status'] }) => void
   setQrModal: (data: QrModal | null) => void
 }
 
@@ -43,8 +44,8 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     }
   },
 
-  addAccount: async (phone) => {
-    const account = await apiClient.post<ZaloAccount>('/api/accounts', { phone })
+  addAccount: async () => {
+    const account = await apiClient.post<ZaloAccount>('/api/accounts', {})
     set((s) => ({ accounts: [...s.accounts, account] }))
     return account
   },
@@ -60,6 +61,20 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
       accounts: s.accounts.map((a) =>
         a.id === data.accountId ? { ...a, status: data.status } : a,
       ),
+    }))
+  },
+
+  updateAccountInfo: (data) => {
+    set((s) => ({
+      accounts: s.accounts.map((a) => {
+        if (a.id !== data.accountId) return a
+        return {
+          ...a,
+          ...(data.status !== undefined ? { status: data.status } : {}),
+          ...(data.displayName !== undefined ? { displayName: data.displayName } : {}),
+          ...(data.phone !== undefined ? { phone: data.phone } : {}),
+        }
+      }),
     }))
   },
 
