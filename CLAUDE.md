@@ -212,7 +212,16 @@ Migration hiện tại: add_user_sessions (applied via prisma db push)
 
 ---
 
-## Frontend — BẮT ĐẦU
+## Frontend — HOÀN THÀNH (core)
 
-Next.js 15 App Router + TypeScript + Tailwind + Zustand + socket.io-client
-Chạy: cd frontend && npm run dev (port 3000)
+- Next.js 15 App Router, port 3000
+- Auth flow: register → login → dashboard → logout
+- Socket.io: namespace /zalo, autoConnect:false, connect sau login
+- CORS: backend main.ts enableCors origin:localhost:3000
+- Ring buffer 500 tin nhắn trong chat.store.ts
+- Chạy: cd frontend && npm run dev
+
+## Bug đã fix
+
+- CORS: app.enableCors({ origin:'http://localhost:3000', credentials:true })
+- Password minLength: 8 (khớp backend DTO)

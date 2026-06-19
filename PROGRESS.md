@@ -7,7 +7,7 @@ Phase 1 — Infra        ████████████ DONE
 Phase 2 — Core         ████████████ DONE
 Phase 3 — API/Gateway  ████████████ DONE
 Phase 4 — Auth         ████████████ DONE
-Phase 5 — Frontend     ░░░░░░░░░░░░ TODO
+Phase 5 — Frontend     ████████████ DONE
 Phase 6 — Features     ░░░░░░░░░░░░ TODO
 ```
 
@@ -152,15 +152,63 @@ Tất cả Phase 1–4 done. Backend chạy ổn định tại port 3001.
 
 ---
 
-## 🔲 Phase 5 — Frontend (Next.js 15) — TODO
+## ✅ Phase 5 — Frontend (Next.js 15) — DONE
 
 | # | File/Folder | Nội dung | Status |
 |---|-------------|----------|--------|
-| 5.1 | `frontend/` | Next.js 15 + Tailwind + Zustand setup | ⬜ TODO |
-| 5.2 | `frontend/stores/` | accountStore, messageStore, sessionStore (Zustand) | ⬜ TODO |
-| 5.3 | `frontend/app/inbox/` | Unified inbox — xem tin nhắn tất cả accounts | ⬜ TODO |
-| 5.4 | `frontend/app/accounts/` | Account management, QR login modal | ⬜ TODO |
-| 5.5 | Socket.io client | Kết nối real-time, update stores | ⬜ TODO |
+| 5.1 | `frontend/` | Next.js 16.2.9 + Tailwind + Zustand setup | ✅ DONE |
+| 5.2 | `frontend/stores/` | auth.store, accounts.store, chat.store (Zustand) | ✅ DONE |
+| 5.3 | `frontend/app/(dashboard)/inbox/` | Unified inbox — real-time messages từ socket | ✅ DONE |
+| 5.4 | `frontend/app/(dashboard)/accounts/` | Account grid, QR modal, socket listeners | ✅ DONE |
+| 5.5 | `frontend/lib/socket-client.ts` | Socket.io singleton /zalo namespace | ✅ DONE |
+| 5.6 | `frontend/lib/api-client.ts` | Axios + auto refresh interceptor | ✅ DONE |
+| 5.7 | `frontend/app/(auth)/` | Login + Register pages | ✅ DONE |
+
+### Chi tiết Phase 5
+
+<details>
+<summary>5.x — Frontend structure</summary>
+
+```
+frontend/
+  app/
+    (auth)/login/page.tsx         ← email + password + tenantSlug
+    (auth)/register/page.tsx      ← email + password + displayName + tenantName + tenantSlug
+    (auth)/layout.tsx             ← centered card layout
+    (dashboard)/layout.tsx        ← sidebar + auth guard (fetchMe on mount)
+    (dashboard)/inbox/page.tsx    ← real-time messages via socket
+    (dashboard)/accounts/page.tsx ← account grid + QR modal + socket listeners
+    (dashboard)/contacts/page.tsx ← placeholder
+    page.tsx                      ← redirect /inbox
+  lib/
+    api-client.ts                 ← axios + auto 401 refresh + retry
+    socket-client.ts              ← io singleton, /zalo namespace
+    auth.ts                       ← localStorage token helpers
+  stores/
+    auth.store.ts                 ← login/register/logout/fetchMe
+    accounts.store.ts             ← CRUD + socket status updates
+    chat.store.ts                 ← incoming messages ring buffer (500)
+  components/ui/                  ← Button, Input, Badge, Spinner
+  components/layout/              ← Sidebar, Header
+```
+
+Chạy: `cd frontend && npm run dev` → http://localhost:3000
+</details>
+
+| 4.1-4.4 | `frontend/` | Auth + Accounts + Inbox + QR modal — Playwright pass | ✅ DONE |
+
+---
+
+## ✅ BACKEND HOÀN THÀNH
+## ✅ FRONTEND CORE HOÀN THÀNH
+
+---
+
+## 🔄 Phase 6: Tính năng nâng cao
+
+- Campaign Manager (BullMQ)
+- Inbox real-time (chat.store → inbox/page)
+- CRM contacts
 
 ---
 
