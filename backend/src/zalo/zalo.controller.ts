@@ -4,6 +4,7 @@ import {
   Get,
   Delete,
   Patch,
+  Put,
   Body,
   Param,
   Query,
@@ -215,6 +216,131 @@ export class ZaloController {
         take: limit,
       })
       return msgs
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  // ── Draft endpoints ───────────────────────────────────────────────────────────
+
+  @Get('drafts')
+  async getDraft(
+    @Query('accountId') accountId: string,
+    @Query('threadId') threadId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ content: string; updatedAt: Date } | null> {
+    try {
+      if (!accountId || !threadId) return null
+      await this.assertAccountBelongsToTenant(accountId, req.user.tenantId)
+      const draft = await this.prisma.draft.findUnique({
+        where: { accountId_threadId: { accountId, threadId } },
+        select: { content: true, updatedAt: true },
+      })
+      return draft
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Put('drafts')
+  async upsertDraft(
+    @Body() body: { accountId: string; threadId: string; content: string },
+    @Req() req: RequestWithUser,
+  ): Promise<{ success: boolean }> {
+    try {
+      await this.assertAccountBelongsToTenant(body.accountId, req.user.tenantId)
+      await this.prisma.draft.upsert({
+        where: { accountId_threadId: { accountId: body.accountId, threadId: body.threadId } },
+        update: { content: body.content },
+        create: {
+          tenantId: req.user.tenantId,
+          accountId: body.accountId,
+          threadId: body.threadId,
+          content: body.content,
+        },
+      })
+      return { success: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Delete('drafts')
+  async deleteDraft(
+    @Query('accountId') accountId: string,
+    @Query('threadId') threadId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ success: boolean }> {
+    try {
+      if (!accountId || !threadId) return { success: true }
+      await this.prisma.draft.deleteMany({
+        where: { accountId, threadId, tenantId: req.user.tenantId },
+      })
+      return { success: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  // ── Quick Message endpoints ───────────────────────────────────────────────────
+
+  @Get('quick-messages')
+  async listQuickMessages(@Req() req: RequestWithUser) {
+    try {
+      return this.prisma.quickMessage.findMany({
+        where: { tenantId: req.user.tenantId, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      })
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Post('quick-messages')
+  async createQuickMessage(
+    @Body() body: { keyword: string; title: string; content?: string; mediaUrl?: string },
+    @Req() req: RequestWithUser,
+  ) {
+    try {
+      return this.prisma.quickMessage.create({
+        data: {
+          tenantId: req.user.tenantId,
+          keyword: body.keyword,
+          title: body.title,
+          content: body.content ?? null,
+          mediaUrl: body.mediaUrl ?? null,
+        },
+      })
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Put('quick-messages/:qmId')
+  async updateQuickMessage(
+    @Param('qmId') id: string,
+    @Body() body: { keyword?: string; title?: string; content?: string; mediaUrl?: string },
+    @Req() req: RequestWithUser,
+  ) {
+    try {
+      const msg = await this.prisma.quickMessage.findFirst({ where: { id, tenantId: req.user.tenantId } })
+      if (!msg) throw new HttpException('Not found', HttpStatus.NOT_FOUND)
+      return this.prisma.quickMessage.update({ where: { id }, data: body })
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Delete('quick-messages/:qmId')
+  async deleteQuickMessage(
+    @Param('qmId') id: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ removed: boolean }> {
+    try {
+      const msg = await this.prisma.quickMessage.findFirst({ where: { id, tenantId: req.user.tenantId } })
+      if (!msg) throw new HttpException('Not found', HttpStatus.NOT_FOUND)
+      await this.prisma.quickMessage.delete({ where: { id } })
+      return { removed: true }
     } catch (err) {
       throw this.mapError(err)
     }
