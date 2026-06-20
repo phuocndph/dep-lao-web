@@ -1,3 +1,6 @@
+import fs from 'fs'
+import os from 'os'
+import path from 'path'
 import { Zalo, ThreadType, LoginQRCallbackEventType } from 'zca-js'
 import type { API } from 'zca-js'
 import type { LoginQRCallbackEvent } from 'zca-js'
@@ -197,6 +200,44 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
         emit({ type: 'MESSAGE_SENT', payload: { msgId, threadId } })
       } catch (err) {
         emit({ type: 'MESSAGE_ERROR', error: err instanceof Error ? err.message : String(err), context: { threadId } })
+      }
+      break
+    }
+
+    case 'SEND_IMAGE': {
+      if (!api) { emit({ type: 'MESSAGE_ERROR', error: 'API not ready', context: { cmd } }); return }
+      if (!checkRateLimit()) {
+        emit({ type: 'MESSAGE_ERROR', error: `Rate limit: max ${MAX_MSG_PER_MINUTE} msg/min`, context: { threadId: cmd.payload.threadId } })
+        return
+      }
+      const { threadId: imgThreadId, threadType: imgThreadType, imageBase64, fileName } = cmd.payload
+      const tmpPath = path.join(os.tmpdir(), `zalo_img_${Date.now()}_${fileName}`)
+      try {
+        const buf = Buffer.from(imageBase64, 'base64')
+        fs.writeFileSync(tmpPath, buf)
+        const type = imgThreadType === 'group' ? ThreadType.Group : ThreadType.User
+        // zca-js sendImage signature may differ — wrap with error handling
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await (api as any).sendImage(tmpPath, imgThreadId, type)
+        const msgId = res?.message?.msgId?.toString() ?? ''
+        emit({ type: 'MESSAGE_SENT', payload: { msgId, threadId: imgThreadId } })
+      } catch (err) {
+        emit({ type: 'MESSAGE_ERROR', error: err instanceof Error ? err.message : String(err), context: { threadId: imgThreadId } })
+      } finally {
+        try { fs.unlinkSync(tmpPath) } catch {}
+      }
+      break
+    }
+
+    case 'RECALL_MESSAGE': {
+      if (!api) { emit({ type: 'MESSAGE_ERROR', error: 'API not ready', context: { cmd } }); return }
+      const { msgId: recallMsgId, threadId: recallThreadId, threadType: recallThreadType } = cmd.payload
+      try {
+        const type = recallThreadType === 'group' ? ThreadType.Group : ThreadType.User
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (api as any).undoMessage(recallMsgId, recallThreadId, type)
+      } catch (err) {
+        emit({ type: 'MESSAGE_ERROR', error: err instanceof Error ? err.message : String(err), context: { threadId: recallThreadId } })
       }
       break
     }

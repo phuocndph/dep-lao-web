@@ -39,7 +39,12 @@ function getInitial(name: string): string {
   return (name || '?').trim().charAt(0).toUpperCase()
 }
 
-export default function ChatWindow() {
+interface ChatWindowProps {
+  onToggleInfo?: () => void
+  onOpenSearch?: () => void
+}
+
+export default function ChatWindow({ onToggleInfo, onOpenSearch }: ChatWindowProps = {}) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [quickMsgs, setQuickMsgs] = useState<QuickMsg[]>([])
@@ -217,12 +222,31 @@ export default function ChatWindow() {
         <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${isGroup ? 'bg-purple-500' : 'bg-blue-500'}`}>
           {isGroup ? <Users className="h-4 w-4" /> : getInitial(name)}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-gray-900">{name}</p>
           <p className="truncate text-xs text-gray-400">
             {activeThreadId}
             {active.account.phone ? ` · Qua ${active.account.phone}` : ''}
           </p>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {onOpenSearch && (
+            <button onClick={onOpenSearch} title="Tìm kiếm (Ctrl+K)"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+            </button>
+          )}
+          {onToggleInfo && (
+            <button onClick={onToggleInfo} title="Thông tin hội thoại"
+              className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

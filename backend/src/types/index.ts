@@ -11,7 +11,7 @@ export type SessionStatus =
 export interface SessionRecord {
   accountId: string
   zaloUserId: string
-  phone: string
+  phone: string | null
   status: SessionStatus
   pid?: number
   workerId: string
@@ -57,6 +57,25 @@ export interface WorkerCommandAddFriend {
   }
 }
 
+export interface WorkerCommandSendImage {
+  type: 'SEND_IMAGE'
+  payload: {
+    threadId: string
+    threadType: 'user' | 'group'
+    imageBase64: string
+    fileName: string
+  }
+}
+
+export interface WorkerCommandRecall {
+  type: 'RECALL_MESSAGE'
+  payload: {
+    msgId: string
+    threadId: string
+    threadType: 'user' | 'group'
+  }
+}
+
 export interface WorkerCommandShutdown {
   type: 'SHUTDOWN'
 }
@@ -69,6 +88,8 @@ export type WorkerCommand =
   | WorkerCommandLoginQr
   | WorkerCommandLoginCookie
   | WorkerCommandSendMessage
+  | WorkerCommandSendImage
+  | WorkerCommandRecall
   | WorkerCommandAddFriend
   | WorkerCommandShutdown
   | WorkerCommandHeartbeat

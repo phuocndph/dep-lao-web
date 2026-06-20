@@ -25,7 +25,7 @@ import { CreateAccountDto } from './dto/create-account.dto'
 import { SendMessageDto, AddFriendDto } from './dto/send-message.dto'
 
 interface RequestWithUser extends Request {
-  user: { userId: string; tenantId: string; role: string }
+  user: { userId: string; tenantId: string; role: string; email?: string }
 }
 
 interface AccountListItem {
@@ -138,6 +138,43 @@ export class ZaloController {
         payload: { threadId: dto.threadId, threadType: dto.threadType, content: dto.content },
       })
       return { sent: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Post('accounts/:accountId/send-image')
+  async sendImage(
+    @Param('accountId') accountId: string,
+    @Body() body: { threadId: string; threadType: 'user' | 'group'; imageBase64: string; fileName: string },
+    @Req() req: RequestWithUser,
+  ): Promise<{ sent: boolean }> {
+    try {
+      await this.assertAccountBelongsToTenant(accountId, req.user.tenantId)
+      await this.checkRateLimit(`rate:${accountId}:send`, 20, 60, 'Rate limit exceeded: 20 msg/phút')
+      await this.pool.sendCommand(accountId, {
+        type: 'SEND_IMAGE',
+        payload: { threadId: body.threadId, threadType: body.threadType, imageBase64: body.imageBase64, fileName: body.fileName },
+      })
+      return { sent: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Post('accounts/:accountId/recall')
+  async recallMessage(
+    @Param('accountId') accountId: string,
+    @Body() body: { msgId: string; threadId: string; threadType: 'user' | 'group' },
+    @Req() req: RequestWithUser,
+  ): Promise<{ recalled: boolean }> {
+    try {
+      await this.assertAccountBelongsToTenant(accountId, req.user.tenantId)
+      await this.pool.sendCommand(accountId, {
+        type: 'RECALL_MESSAGE',
+        payload: { msgId: body.msgId, threadId: body.threadId, threadType: body.threadType },
+      })
+      return { recalled: true }
     } catch (err) {
       throw this.mapError(err)
     }
@@ -358,6 +395,89 @@ export class ZaloController {
         data: { isRead: true },
       })
       return { updated: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  // ── Pinned Message endpoints ──────────────────────────────────────────────────
+
+  @Get('messages/:threadId/pinned')
+  async listPinnedMessages(
+    @Param('threadId') threadId: string,
+    @Query('accountId') accountId: string,
+    @Req() req: RequestWithUser,
+  ) {
+    try {
+      const { tenantId } = req.user
+      const pins = await this.prisma.pinnedMessage.findMany({
+        where: { tenantId, threadId, ...(accountId ? { accountId } : {}) },
+        orderBy: { pinnedAt: 'desc' },
+      })
+      // Join with messages table to get content
+      const pinned = await Promise.all(
+        pins.map(async (p) => {
+          const msg = await this.prisma.message.findFirst({
+            where: { tenantId, threadId, zaloMsgId: p.msgId },
+            select: { content: true, contentType: true, zaloMsgId: true },
+          })
+          return {
+            id: p.id,
+            msgId: p.msgId,
+            msg_id: p.msgId,
+            threadId: p.threadId,
+            accountId: p.accountId,
+            pinnedAt: p.pinnedAt,
+            pinned_at: p.pinnedAt.getTime(),
+            msg_type: msg?.contentType?.toLowerCase() ?? 'text',
+            content: msg?.content ?? '',
+            preview_text: msg?.content?.slice(0, 100) ?? '',
+            preview_image: '',
+            sender_id: '',
+            sender_name: '',
+            timestamp: p.pinnedAt.getTime(),
+          }
+        }),
+      )
+      return pinned
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Post('messages/:threadId/pin')
+  async pinMessage(
+    @Param('threadId') threadId: string,
+    @Body() body: { msgId: string; accountId: string },
+    @Req() req: RequestWithUser,
+  ): Promise<{ pinned: boolean }> {
+    try {
+      const { tenantId, userId } = req.user
+      await this.assertAccountBelongsToTenant(body.accountId, tenantId)
+      await this.prisma.pinnedMessage.upsert({
+        where: { accountId_threadId_msgId: { accountId: body.accountId, threadId, msgId: body.msgId } },
+        update: { pinnedAt: new Date() },
+        create: { tenantId, accountId: body.accountId, threadId, msgId: body.msgId, pinnedBy: userId },
+      })
+      return { pinned: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Delete('messages/:threadId/pin/:msgId')
+  async unpinMessage(
+    @Param('threadId') threadId: string,
+    @Param('msgId') msgId: string,
+    @Query('accountId') accountId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ unpinned: boolean }> {
+    try {
+      const { tenantId } = req.user
+      await this.prisma.pinnedMessage.deleteMany({
+        where: { tenantId, threadId, msgId, ...(accountId ? { accountId } : {}) },
+      })
+      return { unpinned: true }
     } catch (err) {
       throw this.mapError(err)
     }

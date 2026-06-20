@@ -126,7 +126,27 @@ const zalo = {
       return { success: false, error: String(err) }
     }
   },
-  sendImage: notImpl('zalo.sendImage'),
+  sendImage: async (params: {
+    auth: { accountId?: string }
+    threadId: string
+    type: number
+    imageData: string   // base64
+    fileName?: string
+  }) => {
+    const accountId = params.auth?.accountId
+    if (!accountId) return { success: false, error: 'accountId required' }
+    try {
+      await apiClient.post(`/api/accounts/${accountId}/send-image`, {
+        threadId: params.threadId,
+        threadType: params.type === 1 ? 'group' : 'user',
+        imageBase64: params.imageData,
+        fileName: params.fileName || 'image.jpg',
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
   sendImages: notImpl('zalo.sendImages'),
   sendFile: notImpl('zalo.sendFile'),
   sendSticker: notImpl('zalo.sendSticker'),
@@ -134,7 +154,34 @@ const zalo = {
   sendVideo: notImpl('zalo.sendVideo'),
   sendLink: notImpl('zalo.sendLink'),
   sendCard: notImpl('zalo.sendCard'),
-  undoMessage: notImpl('zalo.undoMessage'),
+  undoMessage: async (params: { auth: { accountId?: string }; msgId: string; threadId: string; type: number }) => {
+    const accountId = params.auth?.accountId
+    if (!accountId) return { success: false, error: 'accountId required' }
+    try {
+      await apiClient.post(`/api/accounts/${accountId}/recall`, {
+        msgId: params.msgId,
+        threadId: params.threadId,
+        threadType: params.type === 1 ? 'group' : 'user',
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  recallMessage: async (params: { auth: { accountId?: string }; msgId: string; threadId: string; threadType?: number }) => {
+    const accountId = params.auth?.accountId
+    if (!accountId) return { success: false, error: 'accountId required' }
+    try {
+      await apiClient.post(`/api/accounts/${accountId}/recall`, {
+        msgId: params.msgId,
+        threadId: params.threadId,
+        threadType: (params.threadType ?? 0) === 1 ? 'group' : 'user',
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
   deleteMessage: notImpl('zalo.deleteMessage'),
   deleteChat: notImpl('zalo.deleteChat'),
   addReaction: notImpl('zalo.addReaction'),
@@ -287,22 +334,44 @@ const db = {
     return { success: true, count }
   },
 
-  // Drafts — localStorage
+  // Drafts — REST API (accountId = zaloId in web context)
   upsertDraft: async (params: { zaloId: string; threadId: string; content: string }) => {
-    lsSet(`draft:${params.zaloId}:${params.threadId}`, JSON.stringify({ content: params.content, updatedAt: Date.now() }))
+    try {
+      await apiClient.put('/api/drafts', {
+        accountId: params.zaloId,
+        threadId: params.threadId,
+        content: params.content,
+      })
+    } catch {
+      // best-effort; also mirror to localStorage as fallback
+      lsSet(`draft:${params.zaloId}:${params.threadId}`, JSON.stringify({ content: params.content, updatedAt: Date.now() }))
+    }
     return { success: true }
   },
   deleteDraft: async (params: { zaloId: string; threadId: string }) => {
+    try {
+      await apiClient.del(`/api/drafts?accountId=${params.zaloId}&threadId=${encodeURIComponent(params.threadId)}`)
+    } catch { /* best-effort */ }
     lsRemove(`draft:${params.zaloId}:${params.threadId}`)
     return { success: true }
   },
   getDraft: async (params: { zaloId: string; threadId: string }) => {
-    const raw = lsGet(`draft:${params.zaloId}:${params.threadId}`)
-    if (!raw) return { success: true, draft: null }
-    try { return { success: true, draft: JSON.parse(raw) as { content: string; updatedAt: number } } }
-    catch { return { success: true, draft: null } }
+    try {
+      const draft = await apiClient.get<{ content: string; updatedAt: string } | null>(
+        `/api/drafts?accountId=${params.zaloId}&threadId=${encodeURIComponent(params.threadId)}`,
+      )
+      if (!draft) return { success: true, draft: null }
+      return { success: true, draft: { content: draft.content, updatedAt: new Date(draft.updatedAt).getTime() } }
+    } catch {
+      // fallback to localStorage
+      const raw = lsGet(`draft:${params.zaloId}:${params.threadId}`)
+      if (!raw) return { success: true, draft: null }
+      try { return { success: true, draft: JSON.parse(raw) as { content: string; updatedAt: number } } }
+      catch { return { success: true, draft: null } }
+    }
   },
   getDrafts: async (params: { zaloId: string }) => {
+    // Best-effort: local fallback only (no bulk draft API)
     const prefix = `draft:${params.zaloId}:`
     const drafts: Array<{ threadId: string; content: string; updatedAt: number }> = []
     for (const key of lsKeys()) {
@@ -374,15 +443,95 @@ const db = {
   getKeywordStickers: notImpl('db.getKeywordStickers'),
   getStickersByIds: notImpl('db.getStickersByIds'),
   getAllCachedPackSummaries: notImpl('db.getAllCachedPackSummaries'),
-  getPinnedMessages: notImpl('db.getPinnedMessages'),
+  getPinnedMessages: async (params: { zaloId: string; threadId: string }) => {
+    try {
+      const pins = await apiClient.get<unknown[]>(
+        `/api/messages/${encodeURIComponent(params.threadId)}/pinned?accountId=${params.zaloId}`,
+      )
+      return { success: true, pins }
+    } catch {
+      return { success: true, pins: [] }
+    }
+  },
   getMessagesByType: notImpl('db.getMessagesByType'),
-  pinMessage: notImpl('db.pinMessage'),
-  unpinMessage: notImpl('db.unpinMessage'),
-  bringPinnedToTop: notImpl('db.bringPinnedToTop'),
-  getLocalQuickMessages: notImpl('db.getLocalQuickMessages'),
-  getAllLocalQuickMessages: notImpl('db.getAllLocalQuickMessages'),
-  upsertLocalQuickMessage: notImpl('db.upsertLocalQuickMessage'),
-  deleteLocalQuickMessage: notImpl('db.deleteLocalQuickMessage'),
+  pinMessage: async (params: { zaloId: string; threadId: string; msgId: string }) => {
+    try {
+      await apiClient.post(`/api/messages/${encodeURIComponent(params.threadId)}/pin`, {
+        msgId: params.msgId,
+        accountId: params.zaloId,
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  unpinMessage: async (params: { zaloId: string; threadId: string; msgId: string }) => {
+    try {
+      await apiClient.del(
+        `/api/messages/${encodeURIComponent(params.threadId)}/pin/${encodeURIComponent(params.msgId)}?accountId=${params.zaloId}`,
+      )
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  bringPinnedToTop: async (params: { zaloId: string; threadId: string; msgId: string }) => {
+    // Re-pin to update pinnedAt timestamp
+    try {
+      await apiClient.post(`/api/messages/${encodeURIComponent(params.threadId)}/pin`, {
+        msgId: params.msgId,
+        accountId: params.zaloId,
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  getLocalQuickMessages: async (_params?: { zaloId?: string }) => {
+    try {
+      const items = await apiClient.get<Array<{ id: string; keyword: string; title: string; content?: string; mediaUrl?: string }>>('/api/quick-messages')
+      // Map backend shape → desktop QuickMessage shape
+      const mapped = items.map((i) => ({
+        id: i.id as unknown as number,
+        keyword: i.keyword,
+        message: { title: i.title },
+        media: null,
+        _local: true,
+      }))
+      return { success: true, items: mapped }
+    } catch {
+      return { success: true, items: [] }
+    }
+  },
+  getAllLocalQuickMessages: async () => {
+    try {
+      const items = await apiClient.get<Array<{ id: string; keyword: string; title: string }>>('/api/quick-messages')
+      const mapped = items.map((i) => ({ id: i.id as unknown as number, keyword: i.keyword, message: { title: i.title }, media: null, _local: true }))
+      return { success: true, items: mapped }
+    } catch {
+      return { success: true, items: [] }
+    }
+  },
+  upsertLocalQuickMessage: async (params: { zaloId?: string; item: { keyword: string; title: string; id?: number; media?: unknown } }) => {
+    try {
+      if (params.item.id) {
+        await apiClient.put(`/api/quick-messages/${params.item.id}`, { keyword: params.item.keyword, title: params.item.title })
+      } else {
+        await apiClient.post('/api/quick-messages', { keyword: params.item.keyword, title: params.item.title })
+      }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  deleteLocalQuickMessage: async (params: { zaloId?: string; id: number | string }) => {
+    try {
+      await apiClient.del(`/api/quick-messages/${params.id}`)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
   bulkReplaceLocalQuickMessages: notImpl('db.bulkReplaceLocalQuickMessages'),
   cloneLocalQuickMessages: notImpl('db.cloneLocalQuickMessages'),
   setLocalQMActive: notImpl('db.setLocalQMActive'),
