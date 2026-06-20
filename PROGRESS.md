@@ -204,23 +204,37 @@ Chạy: `cd frontend && npm run dev` → http://localhost:3000
 
 ---
 
-## 🔄 Phase 6: Tính năng nâng cao
+## ✅ Phase 6.0 — Chuẩn bị (2026-06-20)
 
-- Campaign Manager (BullMQ)
-- Inbox real-time (chat.store → inbox/page)
-- CRM contacts
+| # | Nội dung | Status |
+|---|----------|--------|
+| 6.0.1 | IPC inventory ~80 methods — mapping desktop → web API | ✅ DONE |
+| 6.0.2 | Prisma schema mở rộng: 11 models mới (Draft, QuickMessage, PinnedMessage, FriendRequest, GroupMember, Sticker, ContactNote, WorkflowRun, AIAssistant, AIConversation, AIUsageLog) | ✅ DONE |
+| 6.0.3 | Bug fix: F5 về login (layout.tsx effect ordering), delete account không xóa Redis, restoreSessions restore orphan | ✅ DONE |
 
 ---
 
-## 🔲 Phase 6 — Features (Tuần 5–8)
+## 🔄 Phase 6.1 — Shell + Inbox hoàn chỉnh
 
 | # | Feature | Nội dung | Status |
 |---|---------|----------|--------|
-| 6.1 | Campaign Manager | BullMQ queue, rate limit Redis counter, dedup | ⬜ TODO |
-| 6.2 | Workflow Engine | Port WorkflowEngineService từ desktop, thay SQLite→Postgres | ⬜ TODO |
-| 6.3 | CRM Labels | Tags, contact assignment, search nâng cao | ⬜ TODO |
-| 6.4 | Employee/Boss model | Permission middleware, employee view giới hạn | ⬜ TODO |
-| 6.5 | Analytics | Dashboard báo cáo, audit log UI | ⬜ TODO |
+| 6.1.1 | App Shell | Sidebar chuẩn, navigation active state, responsive | 🔄 TODO |
+| 6.1.2 | Inbox hoàn chỉnh | ConversationList + ChatWindow build sạch, fix import từ desktop | 🔄 TODO |
+| 6.1.3 | Draft API | GET/PUT/DELETE /api/drafts/:threadId — save draft khi typing | 🔄 TODO |
+| 6.1.4 | Quick Messages | CRUD /api/quick-messages — popup khi gõ `/` | 🔄 TODO |
+| 6.1.5 | Pinned Messages | GET/POST/DELETE /api/messages/:threadId/pinned | 🔄 TODO |
+
+---
+
+## 🔲 Phase 6.2+ — Features (Tuần sau)
+
+| # | Feature | Nội dung | Status |
+|---|---------|----------|--------|
+| 6.2 | Campaign Manager | BullMQ queue, rate limit Redis counter, dedup | ⬜ TODO |
+| 6.3 | Workflow Engine | Port WorkflowEngineService từ desktop, thay SQLite→Postgres | ⬜ TODO |
+| 6.4 | CRM Labels | Tags, contact assignment, search nâng cao | ⬜ TODO |
+| 6.5 | Employee/Boss model | Permission middleware, employee view giới hạn | ⬜ TODO |
+| 6.6 | Analytics | Dashboard báo cáo, audit log UI | ⬜ TODO |
 
 ---
 

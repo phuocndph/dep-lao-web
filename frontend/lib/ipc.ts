@@ -240,20 +240,41 @@ const db = {
     threadId: string
     limit?: number
     offset?: number
+    before?: string
   }) => {
-    const { useChatStore } = await import('../stores/chatStore')
-    const key = `${params.zaloId}_${params.threadId}`
-    const all = useChatStore.getState().messages[key] || []
-    const limit = params.limit ?? 50
-    const offset = params.offset ?? 0
-    // Newest-first slice then reverse to oldest-first (matches desktop behaviour)
-    const slice = all.slice(Math.max(0, all.length - offset - limit), all.length - offset)
-    return { success: true, messages: [...slice].reverse() }
+    try {
+      const limit = params.limit ?? 50
+      const qs = new URLSearchParams({ limit: String(limit) })
+      if (params.before) qs.set('before', params.before)
+      const messages = await apiClient.get<unknown[]>(`/api/messages/${params.threadId}?${qs}`)
+      return { success: true, messages }
+    } catch {
+      // Fallback to in-memory store
+      const { useChatStore } = await import('../stores/chatStore')
+      const key = `${params.zaloId}_${params.threadId}`
+      const all = useChatStore.getState().messages[key] || []
+      const limit = params.limit ?? 50
+      const offset = params.offset ?? 0
+      const slice = all.slice(Math.max(0, all.length - offset - limit), all.length - offset)
+      return { success: true, messages: [...slice].reverse() }
+    }
+  },
+
+  getThreads: async (_accountId?: string) => {
+    try {
+      const threads = await apiClient.get<unknown[]>('/api/messages/threads')
+      return { success: true, threads }
+    } catch (err) {
+      return { success: false, threads: [], error: String(err) }
+    }
   },
 
   getMessagesAround: notImpl('db.getMessagesAround'),
 
   markAsRead: async (params: { zaloId: string; contactId: string }) => {
+    try {
+      await apiClient.patch(`/api/messages/${params.contactId}/read`, {})
+    } catch { /* best-effort */ }
     const { useChatStore } = await import('../stores/chatStore')
     useChatStore.getState().clearUnread(params.zaloId, params.contactId)
     return { success: true }

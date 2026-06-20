@@ -74,6 +74,9 @@ const apiClient = {
   del<T>(url: string): Promise<T> {
     return instance.delete<T>(url).then((r) => r.data)
   },
+  patch<T>(url: string, data?: unknown): Promise<T> {
+    return instance.patch<T>(url, data).then((r) => r.data)
+  },
 }
 
 export default apiClient

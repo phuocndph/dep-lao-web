@@ -215,3 +215,70 @@ Client gửi `auth: { token }` khi kết nối. Phase 4 sẽ verify JWT thật.
 - ✅ **Tuần 4:** Auth — JWT, guard, tenant isolation thật sự.
 - ✅ **Tuần 5:** Frontend core — register/login/dashboard/accounts/QR modal hoạt động.
 - 🔲 **Tuần 6:** Dockerize + deploy VPS.
+
+---
+
+## Cap nhat cuoi ngay 19/06/2026
+
+Muc nay la handoff de ngay mai mo lai khong quen trang thai du an.
+
+### DONE
+
+- Backend core da xong:
+  - Prisma schema va migrations co ban.
+  - Auth JWT, refresh token, bcrypt password.
+  - Zalo REST API cho accounts, send message, add friend, status.
+  - WebSocket namespace `/zalo`, join room, QR/status/message events.
+  - SessionPoolService quan ly worker Zalo, heartbeat, reconnect, Redis session state.
+  - VaultService ma hoa cookie/imei/userAgent bang HKDF + AES-256-GCM.
+  - Redis module/global connections, pub/sub va rate limit counters.
+
+- Frontend core da xong:
+  - Next.js app, login/register, dashboard layout.
+  - Accounts page, QR modal, socket client.
+  - Inbox co ban, socket listeners, join account rooms.
+  - Auth/account/chat stores bang Zustand.
+
+- UX them tai khoan da doi sang QR-first:
+  - Khong yeu cau nhap so dien thoai truoc.
+  - Click them account se tao account rong va spawn QR flow.
+  - Browser nhan `qr:update` qua Socket.io.
+  - Sau khi login thanh cong, backend cap nhat `phone`, `displayName`, `zaloUid`, `status=CONNECTED`.
+  - Frontend nhan `account:connected` de cap nhat card va dong QR modal.
+
+### DANG DO
+
+- Dang port inbox/chat UI kieu desktop sang web.
+- `frontend/app/(dashboard)/inbox/page.tsx` da duoc tach de dung:
+  - `frontend/components/chat/ConversationList.tsx`
+  - `frontend/components/chat/ChatWindow.tsx`
+- Mot so component chat copy tu desktop co the con import alias/store cu nhu `@/store/*`, `@/lib/*`, `@/hooks/*`.
+- Backend moi them cac message endpoints, can test ky:
+  - `GET /api/messages/threads`
+  - `GET /api/messages/:threadId`
+  - `PATCH /api/messages/:threadId/read`
+- Cac thay doi code dang uncommitted phai xem la dang do, chua xem la done.
+
+### Ngay mai lam tiep theo thu tu
+
+1. Chay infra va 2 app:
+   - `docker compose up -d`
+   - `cd backend && npm run start:dev`
+   - `cd frontend && npm run dev`
+2. Chay `cd frontend && npm run build` de bat loi import/type cua cac component chat moi copy.
+3. Fix build/import cho cac component chat copy tu desktop, uu tien cac import `@/store/*` va module chua ton tai trong frontend.
+4. Test cac endpoint message:
+   - `/api/messages/threads`
+   - `/api/messages/:threadId`
+   - `PATCH /api/messages/:threadId/read`
+5. Test inbox real-time voi 1 account Zalo that:
+   - tao account bang QR-first flow
+   - scan QR
+   - gui tin vao Zalo
+   - browser hien message qua socket
+   - click thread, load messages, mark read
+6. Sau khi inbox desktop-style on dinh moi quay lai Deploy hoac Campaign Manager.
+
+### Known issue
+
+- `DELETE /api/accounts/:id` voi UUID sai format co the tra 500 thay vi 404 vi Prisma validation error chua duoc map dung.

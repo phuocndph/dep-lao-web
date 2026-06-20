@@ -11,11 +11,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { isAuthenticated, isLoading, fetchMe } = useAuthStore()
 
   useEffect(() => {
-    fetchMe()
-  }, [fetchMe])
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      router.push('/login')
+      return
+    }
+    fetchMe().catch(() => router.push('/login'))
+  }, [])
 
+  // Handles logout or token expiry while already inside dashboard
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && !localStorage.getItem('access_token')) {
       router.push('/login')
     }
   }, [isLoading, isAuthenticated, router])

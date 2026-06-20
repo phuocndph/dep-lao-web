@@ -5,6 +5,7 @@ import { ZaloController } from './zalo.controller'
 import { SessionPoolService } from '../pool/session-pool.service'
 import { VaultService } from '../vault/vault.service'
 import { PrismaModule } from '../prisma/prisma.module'
+import { PrismaService } from '../prisma/prisma.service'
 
 @Module({
   imports: [PrismaModule],
@@ -18,9 +19,9 @@ import { PrismaModule } from '../prisma/prisma.module'
     },
     {
       provide: SessionPoolService,
-      useFactory: (redis: IoRedis, redisPub: IoRedis) =>
-        new SessionPoolService(redis, redisPub),
-      inject: ['REDIS', 'REDIS_PUB'],
+      useFactory: (redis: IoRedis, redisPub: IoRedis, prisma: PrismaService) =>
+        new SessionPoolService(redis, redisPub, prisma),
+      inject: ['REDIS', 'REDIS_PUB', PrismaService],
     },
   ],
   exports: [SessionPoolService, VaultService],

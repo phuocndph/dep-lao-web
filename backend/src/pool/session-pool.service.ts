@@ -10,6 +10,7 @@ import type {
   WorkerEvent,
 } from '../types'
 import { DEFAULT_POOL_CONFIG } from '../types'
+import type { PrismaService } from '../prisma/prisma.service'
 
 // When running via ts-node, __filename ends with .ts; use that to detect dev mode
 const isDev = __filename.endsWith('.ts')
@@ -31,6 +32,7 @@ export class SessionPoolService {
   constructor(
     private readonly redis: Redis,
     private readonly redisPub: Redis,
+    private readonly prisma: PrismaService,
     config: Partial<PoolConfig> = {},
   ) {
     this.config = { ...DEFAULT_POOL_CONFIG, ...config }
@@ -294,8 +296,27 @@ export class SessionPoolService {
     for (const key of keys) {
       const raw = await this.redis.get(key)
       if (!raw) continue
-      const session: SessionRecord = { ...(JSON.parse(raw) as SessionRecord), status: 'disconnected' }
-      this.sessions.set(session.accountId, session)
+      try {
+        const session: SessionRecord = JSON.parse(raw) as SessionRecord
+
+        const account = await this.prisma.zaloAccount.findUnique({
+          where: { id: session.accountId },
+          select: { id: true, status: true },
+        })
+
+        if (!account) {
+          await this.redis.del(key)
+          await this.redis.del(`tenant:${session.accountId}`)
+          await this.redis.del(`creds:${session.accountId}`)
+          console.log(`[Pool] Cleaned orphan session: ${session.accountId}`)
+          continue
+        }
+
+        session.status = 'disconnected'
+        this.sessions.set(session.accountId, session)
+      } catch {
+        await this.redis.del(key)
+      }
     }
 
     for (const [accountId, session] of this.sessions) {

@@ -3,8 +3,10 @@ import {
   Post,
   Get,
   Delete,
+  Patch,
   Body,
   Param,
+  Query,
   Req,
   Inject,
   HttpException,
@@ -97,7 +99,10 @@ export class ZaloController {
     try {
       await this.assertAccountBelongsToTenant(accountId, req.user.tenantId)
       await this.pool.removeAccount(accountId)
-      await this.prisma.zaloAccount.update({ where: { id: accountId }, data: { status: 'INACTIVE' } })
+      await this.prisma.zaloAccount.delete({ where: { id: accountId } })
+      await this.redis.del(`creds:${accountId}`)
+      await this.redis.del(`rate:${accountId}:send`)
+      await this.redis.del(`rate:${accountId}:friend`)
       return { removed: true }
     } catch (err) {
       throw this.mapError(err)
@@ -148,6 +153,85 @@ export class ZaloController {
       await this.checkRateLimit(`rate:${accountId}:friend`, 15, 86400, 'Rate limit: 15 kết bạn/ngày')
       await this.pool.sendCommand(accountId, { type: 'ADD_FRIEND', payload: { userId: dto.userId, message: dto.message } })
       return { sent: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  // ── Message endpoints ─────────────────────────────────────────────────────────
+
+  @Get('messages/threads')
+  async listThreads(@Req() req: RequestWithUser) {
+    try {
+      const { tenantId } = req.user
+      const msgs = await this.prisma.message.findMany({
+        where: { tenantId },
+        orderBy: { sentAt: 'desc' },
+        take: 500,
+        select: { threadId: true, threadType: true, accountId: true, content: true, sentAt: true, direction: true, isRead: true },
+      })
+
+      const threadMap = new Map<string, { lastMessage: typeof msgs[0]; unreadCount: number; accountId: string }>()
+      for (const msg of msgs) {
+        if (!threadMap.has(msg.threadId)) {
+          threadMap.set(msg.threadId, { lastMessage: msg, unreadCount: 0, accountId: msg.accountId })
+        }
+        if (!msg.isRead && msg.direction === 'INBOUND') {
+          threadMap.get(msg.threadId)!.unreadCount++
+        }
+      }
+
+      const result = Array.from(threadMap.entries()).map(([threadId, data]) => ({
+        threadId,
+        threadType: data.lastMessage.threadType,
+        accountId: data.accountId,
+        lastMessage: data.lastMessage,
+        unreadCount: data.unreadCount,
+      }))
+      result.sort((a, b) => b.lastMessage.sentAt.getTime() - a.lastMessage.sentAt.getTime())
+      return result
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Get('messages/:threadId')
+  async listMessages(
+    @Param('threadId') threadId: string,
+    @Query('limit') limitStr: string | undefined,
+    @Query('before') before: string | undefined,
+    @Req() req: RequestWithUser,
+  ) {
+    try {
+      const { tenantId } = req.user
+      const limit = Math.min(parseInt(limitStr ?? '50', 10) || 50, 200)
+      const msgs = await this.prisma.message.findMany({
+        where: {
+          tenantId,
+          threadId,
+          ...(before ? { sentAt: { lt: new Date(before) } } : {}),
+        },
+        orderBy: { sentAt: 'asc' },
+        take: limit,
+      })
+      return msgs
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Patch('messages/:threadId/read')
+  async markThreadRead(
+    @Param('threadId') threadId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ updated: boolean }> {
+    try {
+      const { tenantId } = req.user
+      await this.prisma.message.updateMany({
+        where: { tenantId, threadId, isRead: false, direction: 'INBOUND' },
+        data: { isRead: true },
+      })
+      return { updated: true }
     } catch (err) {
       throw this.mapError(err)
     }

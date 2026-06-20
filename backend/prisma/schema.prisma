@@ -71,13 +71,24 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users        User[]
-  zaloAccounts ZaloAccount[]
-  contacts     Contact[]
-  labels       Label[]
-  messages     Message[]
-  campaigns    Campaign[]
-  workflows    Workflow[]
+  users          User[]
+  zaloAccounts   ZaloAccount[]
+  contacts       Contact[]
+  labels         Label[]
+  messages       Message[]
+  campaigns      Campaign[]
+  workflows      Workflow[]
+  drafts         Draft[]
+  quickMessages  QuickMessage[]
+  pinnedMessages PinnedMessage[]
+  friendRequests FriendRequest[]
+  groupMembers   GroupMember[]
+  stickers       Sticker[]
+  contactNotes   ContactNote[]
+  workflowRuns   WorkflowRun[]
+  aiAssistants   AIAssistant[]
+  aiConversations AIConversation[]
+  aiUsageLogs    AIUsageLog[]
 
   @@map("tenants")
 }
@@ -125,11 +136,15 @@ model ZaloAccount {
   createdAt   DateTime          @default(now()) @map("created_at")
   updatedAt   DateTime          @updatedAt @map("updated_at")
 
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  credentials AccountCredentials?
-  settings    AccountSettings?
-  messages    Message[]
-  campaigns   Campaign[]
+  tenant         Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentials    AccountCredentials?
+  settings       AccountSettings?
+  messages       Message[]
+  campaigns      Campaign[]
+  drafts         Draft[]
+  pinnedMessages PinnedMessage[]
+  friendRequests FriendRequest[]
+  groupMembers   GroupMember[]
 
   @@index([tenantId, status])
   @@map("zalo_accounts")
@@ -176,10 +191,11 @@ model Contact {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   labels     ContactLabel[]
   messages   Message[]
-  recipients CampaignRecipient[]
+  recipients    CampaignRecipient[]
+  contactNotes  ContactNote[]       @relation("ContactNotes")
 
   @@unique([tenantId, zaloUid])
   @@index([tenantId, phone])
@@ -290,9 +306,204 @@ model Workflow {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  runs   WorkflowRun[]
 
   @@map("workflows")
+}
+
+model Draft {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  threadId  String   @map("thread_id")
+  content   String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, threadId])
+  @@index([tenantId])
+  @@map("drafts")
+}
+
+model QuickMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  keyword   String
+  title     String
+  content   String?
+  mediaUrl  String?  @map("media_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, keyword])
+  @@index([tenantId, isActive])
+  @@map("quick_messages")
+}
+
+model PinnedMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  threadId  String   @map("thread_id")
+  msgId     String   @map("msg_id")
+  pinnedAt  DateTime @default(now()) @map("pinned_at")
+  pinnedBy  String   @map("pinned_by") @db.Uuid
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, threadId, msgId])
+  @@index([tenantId, threadId])
+  @@map("pinned_messages")
+}
+
+model FriendRequest {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  accountId  String   @map("account_id") @db.Uuid
+  direction  String
+  fromUserId String   @map("from_user_id")
+  message    String?
+  status     String   @default("pending")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, fromUserId, direction])
+  @@index([tenantId, accountId, status])
+  @@map("friend_requests")
+}
+
+model GroupMember {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  accountId   String   @map("account_id") @db.Uuid
+  groupId     String   @map("group_id")
+  zaloUid     String   @map("zalo_uid")
+  displayName String?  @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  role        Int      @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account ZaloAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, groupId, zaloUid])
+  @@index([tenantId, groupId])
+  @@map("group_members")
+}
+
+model Sticker {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  stickerId   Int      @map("sticker_id")
+  url         String?
+  thumbUrl    String?  @map("thumb_url")
+  catId       Int?     @map("cat_id")
+  isSupported Boolean  @default(true) @map("is_supported")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, stickerId])
+  @@map("stickers")
+}
+
+model ContactNote {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  contactId String   @map("contact_id") @db.Uuid
+  content   String
+  createdBy String   @map("created_by") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact @relation("ContactNotes", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contactId])
+  @@map("contact_notes")
+}
+
+model WorkflowRun {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  workflowId  String    @map("workflow_id") @db.Uuid
+  status      String
+  triggerData Json      @default("{}") @map("trigger_data")
+  result      Json      @default("{}")
+  errorMsg    String?   @map("error_msg")
+  durationMs  Int?      @map("duration_ms")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, workflowId, startedAt(sort: Desc)])
+  @@map("workflow_runs")
+}
+
+model AIAssistant {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  name         String
+  model        String   @default("claude-sonnet-4-6")
+  systemPrompt String?  @map("system_prompt")
+  isDefault    Boolean  @default(false) @map("is_default")
+  isActive     Boolean  @default(true) @map("is_active")
+  config       Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations AIConversation[]
+  usageLogs     AIUsageLog[]
+
+  @@index([tenantId])
+  @@map("ai_assistants")
+}
+
+model AIConversation {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  assistantId String   @map("assistant_id") @db.Uuid
+  accountId   String?  @map("account_id") @db.Uuid
+  threadId    String?  @map("thread_id")
+  messages    Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assistant AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assistantId])
+  @@map("ai_conversations")
+}
+
+model AIUsageLog {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  assistantId      String   @map("assistant_id") @db.Uuid
+  promptTokens     Int      @default(0) @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @default(0) @map("total_tokens")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant    Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assistant AIAssistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, assistantId, createdAt(sort: Desc)])
+  @@map("ai_usage_logs")
 }
 
 model VaultAuditLog {
