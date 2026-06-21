@@ -13,3 +13,6 @@ agents/
 .DS_Store
 docs/
 .vscode/
+.next/
+*.db
+*.sqlite

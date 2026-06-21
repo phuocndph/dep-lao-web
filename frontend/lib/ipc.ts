@@ -31,6 +31,18 @@ function lsKeys(): string[] {
   try { return Object.keys(localStorage) } catch { return [] }
 }
 
+// ─── QR session map: accountId (DB UUID) → tempId (local string) ─────────────
+// Populated by loginQR so the socket bridge can correlate qr:update events.
+const _qrTempIdMap = new Map<string, string>()
+
+export function getQrTempId(accountId: string): string | undefined {
+  return _qrTempIdMap.get(accountId)
+}
+
+export function deleteQrMapping(accountId: string): void {
+  _qrTempIdMap.delete(accountId)
+}
+
 // ─── stub factory ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,7 +79,34 @@ export function emitIpcEvent(channel: string, ...args: unknown[]): void {
 const login = {
   getAccounts: async () => {
     try {
-      const accounts = await apiClient.get<unknown[]>('/api/accounts')
+      // Backend returns AccountListItem[]: { id, phone, displayName, status, connectedAt, unreadCount }
+      // Desktop accountStore expects AccountInfo: { zalo_id, full_name, imei, cookies, ... }
+      const data = await apiClient.get<Array<{
+        id: string
+        phone: string | null
+        displayName: string | null
+        status: string
+        connectedAt?: number
+        unreadCount: number
+      }>>('/api/accounts')
+      const list = Array.isArray(data) ? data : []
+      const accounts = list.map((acc) => ({
+        zalo_id: acc.id,
+        full_name: acc.displayName || acc.phone || acc.id,
+        display_name: acc.displayName || acc.phone || acc.id,
+        avatar_url: '',
+        phone: acc.phone || '',
+        is_business: 0,
+        imei: '',
+        user_agent: '',
+        cookies: '',
+        is_active: 1,
+        created_at: '',
+        isOnline: acc.status === 'connected',
+        isConnected: acc.status === 'connected',
+        listenerActive: acc.status === 'connected',
+        channel: 'zalo' as const,
+      }))
       return { success: true, accounts }
     } catch (err) {
       return { success: false, accounts: [], error: String(err) }
@@ -91,8 +130,29 @@ const login = {
       return { success: false, error: String(err) }
     }
   },
-  loginQR: notImpl('login.loginQR'),
-  loginQRAbort: notImpl('login.loginQRAbort'),
+  loginQR: async (tempId: string, _proxyId?: number | null) => {
+    try {
+      const account = await apiClient.post<{ id: string }>('/api/accounts', {})
+      const accountId = account.id
+      _qrTempIdMap.set(accountId, tempId)
+      // Join socket room so the gateway sends qr:update to this client
+      const { joinAccountRoom } = await import('./socket-client')
+      joinAccountRoom(accountId)
+      return { success: true, accountId }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  },
+  loginQRAbort: async (tempId: string) => {
+    for (const [accountId, tid] of _qrTempIdMap.entries()) {
+      if (tid === tempId) {
+        _qrTempIdMap.delete(accountId)
+        try { await apiClient.del(`/api/accounts/${accountId}`) } catch { /* best-effort */ }
+        break
+      }
+    }
+    return { success: true }
+  },
   loginCookies: notImpl('login.loginCookies'),
   loginAuth: notImpl('login.loginAuth'),
   checkHealth: notImpl('login.checkHealth'),
@@ -558,13 +618,150 @@ const db = {
   setLocalLabelOrder: notImpl('db.setLocalLabelOrder'),
 }
 
-// ─── ipc.crm / ipc.analytics / others — all stubs ────────────────────────────
+// ─── ipc.crm ─────────────────────────────────────────────────────────────────
+// Contacts, labels, and notes — backed by REST API (/api/contacts, /api/labels)
+
+// Shape returned by GET /api/contacts
+interface ApiContact {
+  id: string
+  zaloUid: string
+  phone: string | null
+  displayName: string | null
+  realName: string | null
+  avatarUrl: string | null
+  source: string | null
+  labels: Array<{ contactId: string; labelId: string; label: { id: string; name: string; color: string } }>
+  _count: { contactNotes: number }
+  updatedAt: string
+}
+
+// Map DB contact → CRMContact shape that components expect
+function mapContact(c: ApiContact) {
+  return {
+    contact_id: c.id,
+    zalo_uid: c.zaloUid,
+    display_name: c.displayName ?? c.zaloUid,
+    alias: c.realName ?? '',
+    avatar: c.avatarUrl ?? '',
+    phone: c.phone ?? '',
+    contact_type: 'friend' as const,
+    last_message_time: c.updatedAt ? new Date(c.updatedAt).getTime() : 0,
+    note_count: c._count?.contactNotes ?? 0,
+    labels: (c.labels ?? []).map((cl) => ({ id: cl.label.id, name: cl.label.name, color: cl.label.color })),
+  }
+}
 
 const crm = {
-  getNotes: notImpl('crm.getNotes'),
-  saveNote: notImpl('crm.saveNote'),
-  deleteNote: notImpl('crm.deleteNote'),
-  getContacts: notImpl('crm.getContacts'),
+  // Fetch contact list with optional search/label filter
+  getContacts: async (params?: { zaloId?: string; opts?: { search?: string; labelId?: string; limit?: number; offset?: number } }) => {
+    try {
+      const qs = new URLSearchParams()
+      if (params?.opts?.search) qs.set('search', params.opts.search)
+      if (params?.opts?.labelId) qs.set('labelId', params.opts.labelId)
+      if (params?.opts?.limit != null) qs.set('limit', String(params.opts.limit))
+      if (params?.opts?.offset != null) qs.set('offset', String(params.opts.offset))
+      const result = await apiClient.get<{ contacts: ApiContact[]; total: number }>(`/api/contacts?${qs}`)
+      return { success: true, contacts: result.contacts.map(mapContact), total: result.total }
+    } catch (err) {
+      return { success: false as const, contacts: [], total: 0, error: String(err) }
+    }
+  },
+
+  // Fetch notes for a contact
+  getNotes: async (params: { zaloId?: string; contactId: string }) => {
+    try {
+      const raw = await apiClient.get<Array<{ id: string; contactId: string; content: string; createdAt: string; updatedAt: string }>>(
+        `/api/contacts/${params.contactId}/notes`,
+      )
+      const notes = raw.map((n) => ({
+        id: n.id,
+        contact_id: n.contactId,
+        content: n.content,
+        created_at: new Date(n.createdAt).getTime(),
+        updated_at: new Date(n.updatedAt).getTime(),
+      }))
+      return { success: true, notes }
+    } catch (err) {
+      return { success: false as const, notes: [], error: String(err) }
+    }
+  },
+
+  // Create a note; id in note means update (not supported in web yet — creates new)
+  saveNote: async (params: { zaloId?: string; note: { id?: string; contact_id: string; content: string } }) => {
+    try {
+      // TODO: PUT /api/contacts/:id/notes/:noteId for editing existing notes
+      await apiClient.post(`/api/contacts/${params.note.contact_id}/notes`, { content: params.note.content })
+      return { success: true }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Delete a note — contactId optional (web uses /api/notes/:noteId fallback)
+  deleteNote: async (params: { zaloId?: string; noteId: string; contactId?: string }) => {
+    try {
+      if (params.contactId) {
+        await apiClient.del(`/api/contacts/${params.contactId}/notes/${params.noteId}`)
+      } else {
+        await apiClient.del(`/api/notes/${params.noteId}`)
+      }
+      return { success: true }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Assign a label to a contact
+  assignLabel: async (contactId: string, labelId: string) => {
+    try {
+      await apiClient.post(`/api/contacts/${contactId}/labels`, { labelId })
+      return { success: true }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Remove a label from a contact
+  removeLabel: async (contactId: string, labelId: string) => {
+    try {
+      await apiClient.del(`/api/contacts/${contactId}/labels/${labelId}`)
+      return { success: true }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Fetch all tenant labels
+  getLabels: async () => {
+    try {
+      const labels = await apiClient.get<Array<{ id: string; name: string; color: string }>>('/api/labels')
+      return { success: true, labels }
+    } catch (err) {
+      return { success: false as const, labels: [], error: String(err) }
+    }
+  },
+
+  // Create a new label
+  addLabel: async (name: string, color?: string) => {
+    try {
+      const label = await apiClient.post<{ id: string; name: string; color: string }>('/api/labels', { name, color })
+      return { success: true, label }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Delete a label
+  deleteLabel: async (id: string) => {
+    try {
+      await apiClient.del(`/api/labels/${id}`)
+      return { success: true }
+    } catch (err) {
+      return { success: false as const, error: String(err) }
+    }
+  },
+
+  // Stubs for campaign/analytics features not yet implemented in web
   getContactStats: notImpl('crm.getContactStats'),
   getCampaigns: notImpl('crm.getCampaigns'),
   saveCampaign: notImpl('crm.saveCampaign'),
@@ -573,8 +770,8 @@ const crm = {
   updateCampaignStatus: notImpl('crm.updateCampaignStatus'),
   addCampaignContacts: notImpl('crm.addCampaignContacts'),
   getCampaignContacts: notImpl('crm.getCampaignContacts'),
-  getSendLog: notImpl('crm.getSendLog'),
-  getQueueStatus: notImpl('crm.getQueueStatus'),
+  getSendLog: async () => ({ success: true, logs: [] }),
+  getQueueStatus: async () => ({ success: true, status: null }),
   getCampaignStats: notImpl('crm.getCampaignStats'),
   getActivityStats: notImpl('crm.getActivityStats'),
 }
@@ -627,19 +824,89 @@ export const ipc = {
   util: {
     fetchUrl: notImpl('util.fetchUrl'),
   },
+  update: {
+    download: async () => {},
+    install: async () => {},
+    checkForUpdates: async () => ({ success: false, error: 'not implemented' }),
+  },
+  lockScreen: {
+    status: async () => ({ success: true, enabled: false, isLocked: false, hasPassword: false }),
+    setup: async () => ({ success: false, error: 'not implemented' }),
+    verify: async () => ({ success: false, error: 'not implemented' }),
+    verifyRecovery: async () => ({ success: false, error: 'not implemented' }),
+    changePassword: async () => ({ success: false, error: 'not implemented' }),
+    resetPassword: async () => ({ success: false, error: 'not implemented' }),
+    disable: async () => ({ success: false, error: 'not implemented' }),
+    getRecoveryKey: async () => ({ success: false, error: 'not implemented' }),
+    setBiometric: async () => ({ success: false, error: 'not implemented' }),
+    biometricUnlock: async () => ({ success: false, error: 'not implemented' }),
+  },
+  erp: {
+    notifyUnreadCount: async () => 0,
+    getPermissions: async () => ({ success: true, permissions: [] }),
+    checkPermission: async () => ({ success: true, granted: false }),
+  },
+  tunnel: {
+    start: async () => ({ success: false, error: 'not implemented' }),
+    stop: async () => {},
+    status: async () => ({ running: false }),
+    getUrl: async () => ({ success: false, url: null }),
+  },
+  relay: {
+    startServer: async () => ({ success: false, error: 'not implemented' }),
+    stopServer: async () => {},
+    status: async () => ({ running: false }),
+    kickEmployee: async () => ({ success: false }),
+    getConnections: async () => ({ success: true, connections: [] }),
+  },
   analytics: {} as Record<string, ReturnType<typeof notImpl>>,
   workflow: {} as Record<string, ReturnType<typeof notImpl>>,
   integration: {} as Record<string, ReturnType<typeof notImpl>>,
   ai: {} as Record<string, ReturnType<typeof notImpl>>,
-  tunnel: {} as Record<string, ReturnType<typeof notImpl>>,
   employee: {} as Record<string, ReturnType<typeof notImpl>>,
   workspace: {} as Record<string, ReturnType<typeof notImpl>>,
   sync: {} as Record<string, ReturnType<typeof notImpl>>,
-  relay: {} as Record<string, ReturnType<typeof notImpl>>,
   fb: {} as Record<string, ReturnType<typeof notImpl>>,
   proxy: {} as Record<string, ReturnType<typeof notImpl>>,
-  erp: {} as Record<string, ReturnType<typeof notImpl>>,
-  lockScreen: {} as Record<string, ReturnType<typeof notImpl>>,
 }
 
-export default ipc
+// Proxy wrapper: auto-stub bất kỳ namespace hoặc method nào chưa có,
+// tránh lỗi "X is not a function" khi desktop components gọi method chưa implement.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ipcProxy = new Proxy(ipc as any, {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get(target: any, namespace: string) {
+    if (namespace in target) {
+      const val = target[namespace]
+      // Nếu namespace là object (không phải function/primitive), bọc thêm 1 lớp Proxy
+      if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+        return new Proxy(val, {
+          get(ns: Record<string, unknown>, method: string) {
+            if (method in ns) return ns[method]
+            // Method chưa có → trả function stub
+            return (..._args: unknown[]) => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.warn(`[ipc] stub: ${namespace}.${method}`)
+              }
+              return Promise.resolve({ success: false, error: 'not_implemented' })
+            }
+          },
+        })
+      }
+      return val
+    }
+    // Namespace chưa có → trả object stub với mọi property là function
+    return new Proxy({} as Record<string, unknown>, {
+      get(_t, method: string) {
+        return (..._args: unknown[]) => {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`[ipc] stub: ${namespace}.${method}`)
+          }
+          return Promise.resolve({ success: false, error: 'not_implemented' })
+        }
+      },
+    })
+  },
+})
+
+export default ipcProxy

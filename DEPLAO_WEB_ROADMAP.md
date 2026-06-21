@@ -145,6 +145,37 @@ deplao-builder-main/
 - [x] `accounts.store.ts` — `phone`/`displayName: string | null`, `addAccount()` không nhận args, thêm `updateAccountInfo()`
 - [x] `accounts/page.tsx` — bỏ form nhập SĐT; click button → POST ngay → open QR modal với spinner → QR hiện khi socket fire; "Hủy" DELETE account; "Làm mới" tạo account mới; error display nếu POST fail
 
+### ✅ Deplao Desktop SPA — Embedded vào Next.js (DONE — 20/06/2026)
+
+Thay vì port từng component, embed toàn bộ `src/ui/` vào web app dưới route `/deplao`.
+
+**Chiến lược:** Copy → alias → override ipc → polyfill electronAPI → Next.js page.
+
+**Files tạo mới:**
+- `frontend/deplao-ui/` — nguyên xi `src/ui/` (176 files), tất cả `@/` → `@deplao/`
+- `frontend/deplao-ui/lib/ipc.ts` — OVERRIDE: re-export từ `../../lib/ipc` (web REST adapter)
+- `frontend/deplao-ui/lib/electronPolyfill.ts` — stub `window.electronAPI` (on/app/shell/lockScreen/…)
+- `frontend/app/deplao/page.tsx` — `'use client'`, `dynamic(() => import('@deplao/App'), { ssr: false })`
+- `frontend/configs/` — copy từ `src/configs/` (channelConfig, BuildConfig, VietnamAdministrative)
+- `frontend/utils/` — copy từ `src/utils/` (Logger, profileUtils, aiUtils)
+- `frontend/services/` — copy từ `src/services/` (FacebookScanTypes, erp/permissions)
+- `frontend/models/erp/` — copy từ `src/models/erp/` (Permission)
+- `frontend/assets/` — copy từ `src/assets/` (login/hd_login_fb_cookie.png)
+
+**Config thay đổi:**
+- `frontend/tsconfig.json` — thêm `"@deplao/*": ["./deplao-ui/*"]`
+- `frontend/next.config.ts` — thêm Turbopack `resolveAlias` + webpack `alias` cho `@deplao`, bật `typescript.ignoreBuildErrors`
+- `frontend/deplao-ui/index.css` — bỏ `@tailwind` v3 directives, thêm `@reference "tailwindcss"` (Tailwind v4)
+
+**Packages thêm:** `reactflow`, `recharts`, `react-zoom-pan-pinch`, `dompurify`, `uuid`, `react-quill-new`, `xlsx`
+
+**Routing sau khi xong:**
+- Login thành công → redirect `/deplao` (thay vì `/inbox`)
+- `/deplao` load toàn bộ desktop SPA trong browser
+- `/inbox`, `/accounts` là các route cũ, vẫn còn nhưng không còn là entry point chính
+
+**Build:** `npm run build` từ `frontend/` → pass clean, 10 routes.
+
 ### 🔲 Tuần 6 — Deploy (TIẾP THEO)
 
 - [ ] Dockerize `backend/` và `frontend/`.
@@ -246,6 +277,14 @@ Muc nay la handoff de ngay mai mo lai khong quen trang thai du an.
   - Sau khi login thanh cong, backend cap nhat `phone`, `displayName`, `zaloUid`, `status=CONNECTED`.
   - Frontend nhan `account:connected` de cap nhat card va dong QR modal.
 
+### DONE (cap nhat 21/06/2026)
+
+- Fix `.charAt()` crash tren undefined string: 8 file trong `deplao-ui/` va `frontend/components/` — `AccountCard`, `WorkflowTemplateStore`, `WorkflowList` (4x), `WorkflowEditor`, `ChatWindow`, `EmployeeSettings`, `MergedInboxModal`.
+- Xoa `eslint` key deprecated khoi `next.config.ts` — Next.js 16 khong chay ESLint trong `next build` by default, key cu gay warning.
+- Verify message endpoints da ton tai trong backend (`GET /api/messages/threads`, `GET /api/messages/:threadId`, `PATCH /api/messages/:threadId/read`, draft, quick-messages, pinned messages).
+- Verify `PrismaClientValidationError` da duoc xu ly dung (tra 400, khong phai 500).
+- Build frontend: `npm run build` clean, khong co warning.
+
 ### DANG DO
 
 - Dang port inbox/chat UI kieu desktop sang web.
@@ -281,4 +320,5 @@ Muc nay la handoff de ngay mai mo lai khong quen trang thai du an.
 
 ### Known issue
 
-- `DELETE /api/accounts/:id` voi UUID sai format co the tra 500 thay vi 404 vi Prisma validation error chua duoc map dung.
+- `DELETE /api/accounts/:id` voi UUID sai format: da verify la tra 400 (khong phai 500) — `PrismaClientValidationError` da duoc `mapError` bat thanh BAD_REQUEST.
+- Cac component desktop-ported (`ChatHeader`, `MessageBubbles`, `MessageInput`, `UserProfilePopup`) trong `frontend/components/chat/` con import `@/store/accountStore`, `@/store/appStore` va cac lib/hook chua ton tai trong web. Chua duoc dung o dau trong inbox page hien tai — viec can lam tiep khi port chat UI desktop-style.

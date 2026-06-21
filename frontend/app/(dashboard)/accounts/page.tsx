@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Plus, RefreshCw, Trash2, Wifi, WifiOff, QrCode } from 'lucide-react'
+import { Plus, RefreshCw, Trash2, Wifi, WifiOff, QrCode, RotateCcw } from 'lucide-react'
 import Header from '@/components/layout/header'
 import Button from '@/components/ui/button'
 import Badge from '@/components/ui/badge'
@@ -130,7 +130,7 @@ function QrModal() {
 
 export default function AccountsPage() {
   const { user } = useAuthStore()
-  const { accounts, isLoading, fetchAccounts, addAccount, removeAccount, updateStatus, updateAccountInfo, setQrModal } =
+  const { accounts, isLoading, fetchAccounts, addAccount, reconnectAccount, removeAccount, updateStatus, updateAccountInfo, setQrModal } =
     useAccountsStore()
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState('')
@@ -211,7 +211,16 @@ export default function AccountsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {accounts.map((account) => (
-              <AccountCard key={account.id} account={account} onRemove={removeAccount} />
+              <AccountCard
+                key={account.id}
+                account={account}
+                onRemove={removeAccount}
+                onReconnect={async (id) => {
+                  await reconnectAccount(id)
+                  joinAccountRoom(id)
+                  setQrModal({ open: true, accountId: id, qrDataUrl: '' })
+                }}
+              />
             ))}
           </div>
         )}
@@ -222,14 +231,19 @@ export default function AccountsPage() {
   )
 }
 
+const RECONNECTABLE: ZaloAccount['status'][] = ['inactive', 'error']
+
 function AccountCard({
   account,
   onRemove,
+  onReconnect,
 }: {
   account: ZaloAccount
   onRemove: (id: string) => Promise<void>
+  onReconnect: (id: string) => Promise<void>
 }) {
   const [removing, setRemoving] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const handleRemove = async () => {
     setRemoving(true)
@@ -240,7 +254,17 @@ function AccountCard({
     }
   }
 
+  const handleReconnect = async () => {
+    setReconnecting(true)
+    try {
+      await onReconnect(account.id)
+    } finally {
+      setReconnecting(false)
+    }
+  }
+
   const label = account.displayName || account.phone || 'Chưa kết nối'
+  const canReconnect = RECONNECTABLE.includes(account.status)
 
   return (
     <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
@@ -265,11 +289,19 @@ function AccountCard({
 
       <div className="mt-3 flex items-center justify-between">
         <Badge variant={STATUS_BADGE[account.status]}>{STATUS_LABEL[account.status]}</Badge>
-        {account.connectedAt && (
-          <span className="text-xs text-gray-400">
-            {new Date(account.connectedAt).toLocaleDateString('vi-VN')}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {canReconnect && (
+            <Button size="sm" loading={reconnecting} onClick={handleReconnect} className="gap-1 text-xs px-2 py-1 h-auto">
+              <RotateCcw className="h-3 w-3" />
+              Kết nối lại
+            </Button>
+          )}
+          {account.connectedAt && !canReconnect && (
+            <span className="text-xs text-gray-400">
+              {new Date(account.connectedAt).toLocaleDateString('vi-VN')}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

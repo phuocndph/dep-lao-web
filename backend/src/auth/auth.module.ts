@@ -5,6 +5,7 @@ import { ConfigService } from '@nestjs/config'
 import { PrismaModule } from '../prisma/prisma.module'
 import { AuthService } from './auth.service'
 import { AuthController } from './auth.controller'
+import { UsersController } from './users.controller'
 import { JwtStrategy } from './jwt.strategy'
 import { JwtAuthGuard } from './guards/jwt-auth.guard'
 
@@ -20,7 +21,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard'
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, UsersController],
   providers: [AuthService, JwtStrategy, JwtAuthGuard],
   exports: [JwtAuthGuard, JwtStrategy],
 })

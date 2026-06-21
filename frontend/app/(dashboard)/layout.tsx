@@ -16,7 +16,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push('/login')
       return
     }
-    fetchMe().catch(() => router.push('/login'))
+    // After auth, redirect to the full Deplao SPA
+    fetchMe()
+      .then(() => router.push('/deplao'))
+      .catch(() => router.push('/login'))
   }, [])
 
   // Handles logout or token expiry while already inside dashboard

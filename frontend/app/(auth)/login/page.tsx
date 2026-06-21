@@ -20,7 +20,7 @@ export default function LoginPage() {
     setError('')
     try {
       await login(email, password, tenantSlug)
-      router.push('/inbox')
+      router.push('/deplao')
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??

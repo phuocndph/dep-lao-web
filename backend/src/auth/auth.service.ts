@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common'
+import { Injectable, UnauthorizedException, ConflictException, NotFoundException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import * as bcrypt from 'bcryptjs'
@@ -6,6 +6,7 @@ import * as crypto from 'crypto'
 import { PrismaService } from '../prisma/prisma.service'
 import { RegisterDto } from './dto/register.dto'
 import { LoginDto } from './dto/login.dto'
+import { CreateUserDto } from './dto/create-user.dto'
 import type { User } from '@prisma/client'
 
 export interface JwtPayload {
@@ -100,6 +101,35 @@ export class AuthService {
     await this.prisma.userSession.deleteMany({ where: { refreshToken } })
   }
 
+  async createUser(tenantId: string, dto: CreateUserDto) {
+    const existing = await this.prisma.user.findFirst({ where: { tenantId, email: dto.email } })
+    if (existing) throw new ConflictException('Email already registered in this tenant')
+
+    const passwordHash = await bcrypt.hash(dto.password, 12)
+    return this.prisma.user.create({
+      data: { tenantId, email: dto.email, passwordHash, displayName: dto.displayName, role: dto.role ?? 'EMPLOYEE' },
+      select: { id: true, email: true, displayName: true, role: true, isActive: true, createdAt: true },
+    })
+  }
+
+  async listUsers(tenantId: string) {
+    return this.prisma.user.findMany({
+      where: { tenantId },
+      select: { id: true, email: true, displayName: true, role: true, isActive: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    })
+  }
+
+  async deleteUser(tenantId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, tenantId } })
+    if (!user) throw new NotFoundException('User not found')
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false },
+      select: { id: true, isActive: true },
+    })
+  }
+
   async getMe(userId: string): Promise<AuthUserInfo> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -112,10 +142,7 @@ export class AuthService {
   private async generateTokens(user: User, tenantId: string): Promise<AuthResponse> {
     const payload: JwtPayload = { sub: user.id, tenantId, role: user.role, email: user.email }
 
-    const accessToken = this.jwtService.sign(payload, {
-      secret: this.config.get<string>('JWT_SECRET'),
-      expiresIn: '15m',
-    })
+    const accessToken = this.jwtService.sign(payload)
 
     const refreshToken = crypto.randomUUID()
     await this.prisma.userSession.create({

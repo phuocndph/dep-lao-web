@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common'
 import type { Request } from 'express'
 import type IoRedis from 'ioredis'
+import { PrismaClientValidationError } from '@prisma/client/runtime/library'
 import type { SessionRecord } from '../types'
 import { SessionPoolService } from '../pool/session-pool.service'
 import { VaultService } from '../vault/vault.service'
@@ -175,6 +176,28 @@ export class ZaloController {
         payload: { msgId: body.msgId, threadId: body.threadId, threadType: body.threadType },
       })
       return { recalled: true }
+    } catch (err) {
+      throw this.mapError(err)
+    }
+  }
+
+  @Post('accounts/:accountId/reconnect')
+  async reconnectAccount(
+    @Param('accountId') accountId: string,
+    @Req() req: RequestWithUser,
+  ): Promise<{ status: string }> {
+    try {
+      const { tenantId } = req.user
+      const account = await this.prisma.zaloAccount.findFirst({ where: { id: accountId, tenantId } })
+      if (!account) throw new HttpException('Account not found', HttpStatus.NOT_FOUND)
+
+      const session = this.pool.getSession(accountId)
+      if (session && this.pool.hasWorker(accountId)) {
+        await this.pool.sendCommand(accountId, { type: 'LOGIN_QR' })
+      } else {
+        await this.pool.addAccount({ accountId, phone: account.phone, tenantId })
+      }
+      return { status: 'qr_pending' }
     } catch (err) {
       throw this.mapError(err)
     }
@@ -498,9 +521,15 @@ export class ZaloController {
 
   private mapError(err: unknown): HttpException {
     if (err instanceof HttpException) return err
+    if (err instanceof PrismaClientValidationError) {
+      return new HttpException('Invalid request format', HttpStatus.BAD_REQUEST)
+    }
     const msg = err instanceof Error ? err.message : String(err)
     if (msg.includes('No active worker')) return new HttpException('Account worker not found', HttpStatus.NOT_FOUND)
-    if (msg.includes('Record to update not found') || msg.includes('not found')) return new HttpException('Account not found', HttpStatus.NOT_FOUND)
+    if (msg.includes('Record to update not found') || msg.includes('not found') || msg.includes('not exist')) {
+      return new HttpException('Account not found', HttpStatus.NOT_FOUND)
+    }
+    if (msg.includes('Unique constraint failed')) return new HttpException('Resource already exists', HttpStatus.CONFLICT)
     return new HttpException('Internal server error', HttpStatus.INTERNAL_SERVER_ERROR)
   }
 }

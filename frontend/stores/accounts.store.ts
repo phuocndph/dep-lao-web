@@ -23,6 +23,7 @@ interface AccountsState {
   qrModal: QrModal | null
   fetchAccounts: (tenantId: string) => Promise<void>
   addAccount: () => Promise<ZaloAccount>
+  reconnectAccount: (id: string) => Promise<void>
   removeAccount: (id: string) => Promise<void>
   updateStatus: (data: { accountId: string; status: ZaloAccount['status'] }) => void
   updateAccountInfo: (data: { accountId: string; displayName?: string | null; phone?: string | null; status?: ZaloAccount['status'] }) => void
@@ -48,6 +49,13 @@ export const useAccountsStore = create<AccountsState>((set, get) => ({
     const account = await apiClient.post<ZaloAccount>('/api/accounts', {})
     set((s) => ({ accounts: [...s.accounts, account] }))
     return account
+  },
+
+  reconnectAccount: async (id) => {
+    await apiClient.post(`/api/accounts/${id}/reconnect`, {})
+    set((s) => ({
+      accounts: s.accounts.map((a) => a.id === id ? { ...a, status: 'qr_pending' as const } : a),
+    }))
   },
 
   removeAccount: async (id) => {

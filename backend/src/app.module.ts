@@ -5,6 +5,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { ZaloModule } from './zalo/zalo.module'
 import { GatewayModule } from './gateway/gateway.module'
 import { AuthModule } from './auth/auth.module'
+import { CrmModule } from './crm/crm.module'
 import { VaultInternalController, VaultPublicController } from './vault/vault-internal.controller'
 
 @Module({
@@ -15,6 +16,7 @@ import { VaultInternalController, VaultPublicController } from './vault/vault-in
     AuthModule,
     ZaloModule,
     GatewayModule,
+    CrmModule,
   ],
   controllers: [VaultInternalController, VaultPublicController],
 })

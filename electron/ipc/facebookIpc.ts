@@ -1,6 +1,6 @@
-/**
+﻿/**
  * facebookIpc.ts
- * IPC handlers cho tất cả Facebook operations
+ * IPC handlers cho táº¥t cáº£ Facebook operations
  * Pattern: ipcMain.handle('fb:channel', async (_event, params) => { ... })
  */
 
@@ -16,18 +16,18 @@ import EventBroadcaster from '../../src/services/event/EventBroadcaster';
 import Logger from '../../src/utils/Logger';
 import FacebookService from "../../src/services/facebook/FacebookService";
 
-// ─── Cookie secure storage helpers ───────────────────────────────────────────
+// â”€â”€â”€ Cookie secure storage helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function fbCookieKey(accountId: string): string {
   return `fb_cookie_${accountId}`;
 }
 
 /**
- * Resolve accountId: nếu là Facebook UID (all digits) → tìm UUID từ fb_accounts.
- * Nếu đã là UUID → trả về nguyên. Dùng cho tất cả handlers nhận accountId từ UI.
+ * Resolve accountId: náº¿u lÃ  Facebook UID (all digits) â†’ tÃ¬m UUID tá»« fb_accounts.
+ * Náº¿u Ä‘Ã£ lÃ  UUID â†’ tráº£ vá» nguyÃªn. DÃ¹ng cho táº¥t cáº£ handlers nháº­n accountId tá»« UI.
  */
 function resolveInternalId(accountId: string): string {
-  // Nếu trông giống Facebook UID (all digits) → lookup UUID
+  // Náº¿u trÃ´ng giá»‘ng Facebook UID (all digits) â†’ lookup UUID
   if (/^\d+$/.test(accountId)) {
     const fbAcc = DatabaseService.getInstance().getFBAccountByFacebookId(accountId);
     if (fbAcc?.id) return fbAcc.id;
@@ -36,9 +36,9 @@ function resolveInternalId(accountId: string): string {
 }
 
 /**
- * Luôn resolve numeric Facebook ID — dùng làm tên thư mục lưu media.
- * Không fallback về internal UUID: nếu service null hoặc chưa init,
- * tra DB để lấy facebook_id thật.
+ * LuÃ´n resolve numeric Facebook ID â€” dÃ¹ng lÃ m tÃªn thÆ° má»¥c lÆ°u media.
+ * KhÃ´ng fallback vá» internal UUID: náº¿u service null hoáº·c chÆ°a init,
+ * tra DB Ä‘á»ƒ láº¥y facebook_id tháº­t.
  */
 function resolveRealFacebookId(internalId: string, service: any): string {
   const fbId = service?.getRealFacebookId();
@@ -47,20 +47,20 @@ function resolveRealFacebookId(internalId: string, service: any): string {
   return fbAcc?.facebook_id || internalId;
 }
 
-/** Open-source build: giữ hàm để không vỡ import ở main process. */
+/** Open-source build: giá»¯ hÃ m Ä‘á»ƒ khÃ´ng vá»¡ import á»Ÿ main process. */
 export function setFBMainWindow(_win: any) {}
 
 /**
- * Lấy FacebookService từ ConnectionManager, tự động reconnect nếu chưa có.
- * Tất cả handlers gọi hàm này thay vì FacebookConnectionManager.get() trực tiếp.
- * Tránh lỗi "Account not connected" khi mạng drop rồi online lại nhưng
- * ConnectionManager chưa kịp đồng bộ.
+ * Láº¥y FacebookService tá»« ConnectionManager, tá»± Ä‘á»™ng reconnect náº¿u chÆ°a cÃ³.
+ * Táº¥t cáº£ handlers gá»i hÃ m nÃ y thay vÃ¬ FacebookConnectionManager.get() trá»±c tiáº¿p.
+ * TrÃ¡nh lá»—i "Account not connected" khi máº¡ng drop rá»“i online láº¡i nhÆ°ng
+ * ConnectionManager chÆ°a ká»‹p Ä‘á»“ng bá»™.
  */
 async function getFBServiceOrReconnect(internalId: string): Promise<FacebookService | null> {
   let service = FacebookConnectionManager.get(internalId);
   if (service) return service;
 
-  Logger.warn(`[facebookIpc] Service ${internalId} not in ConnectionManager — attempting auto-reconnect...`);
+  Logger.warn(`[facebookIpc] Service ${internalId} not in ConnectionManager â€” attempting auto-reconnect...`);
   const account = DatabaseService.getInstance().getFBAccount(internalId);
   if (!account) return null;
 
@@ -83,18 +83,18 @@ async function getFBServiceOrReconnect(internalId: string): Promise<FacebookServ
   }
 }
 
-// ─── Handlers ────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function registerFacebookIpc(): void {
 
   /**
    * Shared helper: verify cookie, save account to DB, connect.
-   * Dùng chung cho cả cookie-based và credentials-based login.
+   * DÃ¹ng chung cho cáº£ cookie-based vÃ  credentials-based login.
    */
   async function _addFBAccountCommon(cookie: string, proxyId: number | null | undefined): Promise<{
     success: boolean; account?: any; facebookId?: string; name?: string; error?: string;
   }> {
-    // Resolve proxy agent để dùng cho initSession
+    // Resolve proxy agent Ä‘á»ƒ dÃ¹ng cho initSession
     let httpsAgent: any = undefined;
     if (proxyId) {
       try {
@@ -111,21 +111,21 @@ export function registerFacebookIpc(): void {
     const fbId = sessionData.FacebookID;
 
     if (!fbId || fbId === '0' || fbId.includes('Unable') || !fbId.match(/^\d+$/)) {
-      return { success: false, error: 'Cookie không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại Facebook và copy cookie mới.' };
+      return { success: false, error: 'Cookie khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i Facebook vÃ  copy cookie má»›i.' };
     }
 
-    // 2. Nếu account đã tồn tại (trong fb_accounts), xoá record cũ để thêm lại
+    // 2. Náº¿u account Ä‘Ã£ tá»“n táº¡i (trong fb_accounts), xoÃ¡ record cÅ© Ä‘á»ƒ thÃªm láº¡i
     const existing = DatabaseService.getInstance().getFBAccounts()
       .find((a: any) => a.facebook_id === fbId);
     if (existing) {
-      Logger.log(`[facebookIpc] _addFBAccountCommon — account ${fbId} đã tồn tại, xoá cũ và thêm lại`);
+      Logger.log(`[facebookIpc] _addFBAccountCommon â€” account ${fbId} Ä‘Ã£ tá»“n táº¡i, xoÃ¡ cÅ© vÃ  thÃªm láº¡i`);
       await FacebookConnectionManager.disconnect(existing.id).catch(() => {});
       secureDelete(fbCookieKey(existing.id));
       DatabaseService.getInstance().deleteFBAccount(existing.id);
       DatabaseService.getInstance().deleteAccount(fbId);
     }
 
-    // 3. Lấy tên + avatar
+    // 3. Láº¥y tÃªn + avatar
     let name = fbId;
     let avatarUrl = '';
     try {
@@ -135,7 +135,7 @@ export function registerFacebookIpc(): void {
       avatarUrl = profile.avatarUrl || '';
     } catch {}
 
-    // 4. Lưu vào DB (cookie mã hóa)
+    // 4. LÆ°u vÃ o DB (cookie mÃ£ hÃ³a)
     const accountId = uuid();
     secureSet(fbCookieKey(accountId), cookie);
 
@@ -149,7 +149,7 @@ export function registerFacebookIpc(): void {
       status: 'disconnected',
     });
 
-    // Also sync to unified accounts table — use fbId as zalo_id (for license matching)
+    // Also sync to unified accounts table â€” use fbId as zalo_id (for license matching)
     DatabaseService.getInstance()['run'](
       `INSERT INTO accounts (zalo_id, full_name, avatar_url, phone, is_business, imei, user_agent, cookies, is_active, channel, proxy_id, created_at)
        VALUES (?, ?, ?, '', 0, '', '', '', 1, 'facebook', ?, datetime('now'))
@@ -159,7 +159,7 @@ export function registerFacebookIpc(): void {
       [fbId, name, avatarUrl, proxyId ?? null]
     );
 
-    // 5. Connect (with proxy) — getOrCreate đã tự động connect
+    // 5. Connect (with proxy) â€” getOrCreate Ä‘Ã£ tá»± Ä‘á»™ng connect
     await FacebookConnectionManager.getOrCreate(accountId, cookie, proxyId);
 
     const account = DatabaseService.getInstance().getFBAccount(accountId);
@@ -167,7 +167,7 @@ export function registerFacebookIpc(): void {
   }
 
   /**
-   * Thêm tài khoản Facebook bằng cookie
+   * ThÃªm tÃ i khoáº£n Facebook báº±ng cookie
    */
   ipcMain.handle('fb:addAccount', async (_event, { cookie, proxyId }: { cookie: string; proxyId?: number | null }) => {
     try {
@@ -179,8 +179,8 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Thêm tài khoản Facebook bằng username/password (+ 2FA optional)
-   * Gọi loginWithCredentials → lấy cookie → tạo account qua _addFBAccountCommon
+   * ThÃªm tÃ i khoáº£n Facebook báº±ng username/password (+ 2FA optional)
+   * Gá»i loginWithCredentials â†’ láº¥y cookie â†’ táº¡o account qua _addFBAccountCommon
    */
   ipcMain.handle('fb:addAccountWithCredentials', async (_event, params: {
     username: string; password: string; twoFASecret?: string; proxyId?: number | null;
@@ -198,35 +198,35 @@ export function registerFacebookIpc(): void {
         } catch {}
       }
 
-      // 1. Đăng nhập lấy cookie
+      // 1. ÄÄƒng nháº­p láº¥y cookie
       const loginResult = await loginWithCredentials(
         params.username, params.password, params.twoFASecret, httpsAgent
       );
 
-      // 2FA challenge — yêu cầu UI cung cấp twoFASecret
+      // 2FA challenge â€” yÃªu cáº§u UI cung cáº¥p twoFASecret
       if (loginResult.error?.error_subcode === 1348162) {
         return {
           success: false,
           need2FA: true,
-          error: loginResult.error.description || 'Tài khoản yêu cầu xác thực 2 yếu tố (2FA). Vui lòng nhập mã bí mật 2FA.',
+          error: loginResult.error.description || 'TÃ i khoáº£n yÃªu cáº§u xÃ¡c thá»±c 2 yáº¿u tá»‘ (2FA). Vui lÃ²ng nháº­p mÃ£ bÃ­ máº­t 2FA.',
           errorTitle: loginResult.error.title,
         };
       }
 
-      // Lỗi đăng nhập khác (sai mật khẩu, checkpoint, ...)
+      // Lá»—i Ä‘Äƒng nháº­p khÃ¡c (sai máº­t kháº©u, checkpoint, ...)
       if (!loginResult.success) {
         Logger.warn(`[facebookIpc] loginWithCredentials failed:`, JSON.stringify(loginResult.error));
         return {
           success: false,
-          error: loginResult.error?.description || loginResult.error?.title || 'Đăng nhập thất bại',
+          error: loginResult.error?.description || loginResult.error?.title || 'ÄÄƒng nháº­p tháº¥t báº¡i',
           errorTitle: loginResult.error?.title,
         };
       }
 
-      // 2. Thành công — tạo account với cookie vừa lấy được
+      // 2. ThÃ nh cÃ´ng â€” táº¡o account vá»›i cookie vá»«a láº¥y Ä‘Æ°á»£c
       const cookie = loginResult.success.setCookies;
       if (!cookie) {
-        return { success: false, error: 'Đăng nhập thành công nhưng không lấy được cookie.' };
+        return { success: false, error: 'ÄÄƒng nháº­p thÃ nh cÃ´ng nhÆ°ng khÃ´ng láº¥y Ä‘Æ°á»£c cookie.' };
       }
 
       return await _addFBAccountCommon(cookie, params.proxyId);
@@ -237,7 +237,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Xóa tài khoản Facebook
+   * XÃ³a tÃ i khoáº£n Facebook
    */
   ipcMain.handle('fb:removeAccount', async (_event, { accountId }: { accountId: string }) => {
     try {
@@ -254,19 +254,19 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Cập nhật cookie cho tài khoản Facebook hiện có
+   * Cáº­p nháº­t cookie cho tÃ i khoáº£n Facebook hiá»‡n cÃ³
    */
   ipcMain.handle('fb:updateCookie', async (_event, { accountId, cookie }: { accountId: string; cookie: string }) => {
     try {
       const internalId = resolveInternalId(accountId);
       const account = DatabaseService.getInstance().getFBAccount(internalId);
-      if (!account) return { success: false, error: 'Tài khoản không tồn tại' };
+      if (!account) return { success: false, error: 'TÃ i khoáº£n khÃ´ng tá»“n táº¡i' };
 
       // Verify cookie alive + init session
       const sessionData = await initSession(cookie);
       const fbId = sessionData.FacebookID;
       if (!fbId || !fbId.match(/^\d+$/) || fbId.includes('Unable')) {
-        return { success: false, error: 'Cookie không hợp lệ hoặc đã hết hạn' };
+        return { success: false, error: 'Cookie khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n' };
       }
 
       // Fetch updated profile
@@ -282,8 +282,8 @@ export function registerFacebookIpc(): void {
       // Update cookie in secure storage
       secureSet(fbCookieKey(internalId), cookie);
 
-      // Update cookie_encrypted fallback (raw cookie) để reconnect vẫn hoạt động
-      // khi safeStorage key thay đổi
+      // Update cookie_encrypted fallback (raw cookie) Ä‘á»ƒ reconnect váº«n hoáº¡t Ä‘á»™ng
+      // khi safeStorage key thay Ä‘á»•i
       DatabaseService.getInstance().run(
         `UPDATE fb_accounts SET cookie_encrypted = ?, updated_at = ? WHERE id = ?`,
         [cookie, Date.now(), internalId]
@@ -308,16 +308,16 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Refresh profile (tên, avatar) cho tài khoản Facebook hiện có
+   * Refresh profile (tÃªn, avatar) cho tÃ i khoáº£n Facebook hiá»‡n cÃ³
    */
   ipcMain.handle('fb:refreshProfile', async (_event, { accountId }: { accountId: string }) => {
     try {
       const internalId = resolveInternalId(accountId);
       const account = DatabaseService.getInstance().getFBAccount(internalId);
-      if (!account) return { success: false, error: 'Tài khoản không tồn tại' };
+      if (!account) return { success: false, error: 'TÃ i khoáº£n khÃ´ng tá»“n táº¡i' };
 
       const cookie = secureGet(fbCookieKey(internalId)) || account.cookie_encrypted;
-      if (!cookie) return { success: false, error: 'Không tìm thấy cookie. Vui lòng cập nhật cookie.' };
+      if (!cookie) return { success: false, error: 'KhÃ´ng tÃ¬m tháº¥y cookie. Vui lÃ²ng cáº­p nháº­t cookie.' };
 
       let name = account.name || account.facebook_id;
       let avatarUrl = account.avatar_url || '';
@@ -349,27 +349,27 @@ export function registerFacebookIpc(): void {
 
   /**
    * Refresh avatar cho 1 contact Facebook (user 1-1).
-   * Dùng khi avatar CDN hết hạn (403). Re-fetch thread list từ GraphQL
-   * để lấy avatar URL mới, update DB, trả về URL.
+   * DÃ¹ng khi avatar CDN háº¿t háº¡n (403). Re-fetch thread list tá»« GraphQL
+   * Ä‘á»ƒ láº¥y avatar URL má»›i, update DB, tráº£ vá» URL.
    */
   ipcMain.handle('fb:refreshContactAvatar', async (_event, { accountId, userId }: { accountId: string; userId: string }) => {
     try {
       const internalId = resolveInternalId(accountId);
       const cookie = secureGet(fbCookieKey(internalId));
-      if (!cookie) return { success: false, error: 'Không tìm thấy cookie. Vui lòng cập nhật cookie.', avatarUrl: null };
+      if (!cookie) return { success: false, error: 'KhÃ´ng tÃ¬m tháº¥y cookie. Vui lÃ²ng cáº­p nháº­t cookie.', avatarUrl: null };
 
       const service = FacebookConnectionManager.get(internalId);
       if (!service || !service.isConnected()) {
-        // Nếu service chưa connect, vẫn có thể gọi refreshContactAvatar
-        // bằng cách tạo temporary service không persistent
-        return { success: false, error: 'Tài khoản chưa kết nối', avatarUrl: null };
+        // Náº¿u service chÆ°a connect, váº«n cÃ³ thá»ƒ gá»i refreshContactAvatar
+        // báº±ng cÃ¡ch táº¡o temporary service khÃ´ng persistent
+        return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i', avatarUrl: null };
       }
 
       const avatarUrl = await service.refreshContactAvatar(userId);
       if (avatarUrl) {
         return { success: true, avatarUrl };
       }
-      return { success: false, error: 'Không thể lấy avatar mới', avatarUrl: null };
+      return { success: false, error: 'KhÃ´ng thá»ƒ láº¥y avatar má»›i', avatarUrl: null };
     } catch (err: any) {
       Logger.error(`[facebookIpc] fb:refreshContactAvatar error: ${err.message}`);
       return { success: false, error: err.message, avatarUrl: null };
@@ -377,20 +377,20 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy thông tin user (tên + avatar) từ Facebook profile HTML
-   * Dùng cho E2EE / hội thoại mới không có contact info
+   * Láº¥y thÃ´ng tin user (tÃªn + avatar) tá»« Facebook profile HTML
+   * DÃ¹ng cho E2EE / há»™i thoáº¡i má»›i khÃ´ng cÃ³ contact info
    */
   ipcMain.handle('fb:getUserInfoFacebookHtml', async (_event, { accountId, userId }: { accountId: string; userId: string }) => {
     try {
-      // Chỉ cho phép user ID dạng số (không phải group chat)
-      if (!/^\d+$/.test(userId)) return { success: false, error: 'Chỉ hỗ trợ user 1-1' };
+      // Chá»‰ cho phÃ©p user ID dáº¡ng sá»‘ (khÃ´ng pháº£i group chat)
+      if (!/^\d+$/.test(userId)) return { success: false, error: 'Chá»‰ há»— trá»£ user 1-1' };
       const internalId = resolveInternalId(accountId);
       const cookie = secureGet(fbCookieKey(internalId));
       if (!cookie) return { success: false, error: 'Cookie not found' };
       const info = await getUserInfoFacebookHtml(cookie, userId);
       if (info) {
-        Logger.log(`[facebookIpc] fb:getUserInfoFacebookHtml: resolved ${userId} → name="${info.name}"`);
-        // Lưu vào DB nếu có tên
+        Logger.log(`[facebookIpc] fb:getUserInfoFacebookHtml: resolved ${userId} â†’ name="${info.name}"`);
+        // LÆ°u vÃ o DB náº¿u cÃ³ tÃªn
         if (info.name) {
           DatabaseService.getInstance()['run']?.(
             `UPDATE contacts SET display_name = ?, avatar_url = ? WHERE owner_zalo_id = ? AND contact_id = ? AND channel = 'facebook'`,
@@ -399,7 +399,7 @@ export function registerFacebookIpc(): void {
         }
         return { success: true, name: info.name, avatarUrl: info.avatarUrl };
       }
-      return { success: false, error: 'Không thể lấy thông tin user' };
+      return { success: false, error: 'KhÃ´ng thá»ƒ láº¥y thÃ´ng tin user' };
     } catch (err: any) {
       Logger.error(`[facebookIpc] fb:getUserInfoFacebookHtml error: ${err.message}`);
       return { success: false, error: err.message };
@@ -407,7 +407,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy danh sách tài khoản FB
+   * Láº¥y danh sÃ¡ch tÃ i khoáº£n FB
    */
   ipcMain.handle('fb:getAccounts', async () => {
     try {
@@ -428,28 +428,28 @@ export function registerFacebookIpc(): void {
       const account = DatabaseService.getInstance().getFBAccount(internalId);
       if (!account) return { success: false, error: 'Account not found' };
 
-      // Đọc proxyId từ unified accounts table
+      // Äá»c proxyId tá»« unified accounts table
       let proxyId: number | null | undefined;
       try {
         const accRow = DatabaseService.getInstance().queryOne<any>('SELECT proxy_id FROM accounts WHERE zalo_id = ?', [account.facebook_id || accountId]);
         proxyId = accRow?.proxy_id ?? null;
       } catch { proxyId = null; }
 
-      // Test cookie health trước
+      // Test cookie health trÆ°á»›c
       const cookie = secureGet(fbCookieKey(internalId)) || account.cookie_encrypted;
       if (!cookie) return { success: false, error: 'No cookie found for this account' };
 
       try {
         const { checkCookieAlive } = require('../../src/services/facebook/FacebookSession');
         const alive = await checkCookieAlive(cookie);
-        if (!alive) return { success: false, error: 'Cookie đã hết hạn. Vui lòng đăng nhập lại Facebook và copy cookie mới.' };
+        if (!alive) return { success: false, error: 'Cookie Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i Facebook vÃ  copy cookie má»›i.' };
       } catch (healthErr: any) {
         Logger.warn(`[facebookIpc] fb:connect health check failed: ${healthErr.message}, proceeding anyway`);
       }
 
       const service = await FacebookConnectionManager.getOrCreate(internalId, cookie, proxyId);
 
-      // Reset retry count để lần mất kết nối sau bắt đầu lại từ attempt 0
+      // Reset retry count Ä‘á»ƒ láº§n máº¥t káº¿t ná»‘i sau báº¯t Ä‘áº§u láº¡i tá»« attempt 0
       if (service.isConnected()) {
         service.resetListenerRetryCount?.();
         DatabaseService.getInstance().setListenerActive(account.facebook_id || internalId, true);
@@ -492,26 +492,26 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Gửi tin nhắn (C1: auto-route 1:1 qua E2EE)
-   * Dùng chung FacebookSendService.sendTextMessage() với workflow engine.
+   * Gá»­i tin nháº¯n (C1: auto-route 1:1 qua E2EE)
+   * DÃ¹ng chung FacebookSendService.sendTextMessage() vá»›i workflow engine.
    */
    ipcMain.handle('fb:sendMessage', async (_event, params: {
     accountId: string; threadId: string; body: string; options?: any;
   }) => {
     try {
       const internalId = resolveInternalId(params.accountId);
-      Logger.log(`[facebookIpc] fb:sendMessage accountId=${params.accountId} → internalId=${internalId} threadId=${params.threadId} body="${params.body?.slice(0,50)}"`);
+      Logger.log(`[facebookIpc] fb:sendMessage accountId=${params.accountId} â†’ internalId=${internalId} threadId=${params.threadId} body="${params.body?.slice(0,50)}"`);
 
-      // Auto-reconnect nếu service chưa có trong ConnectionManager
+      // Auto-reconnect náº¿u service chÆ°a cÃ³ trong ConnectionManager
       const service = await getFBServiceOrReconnect(internalId);
       if (!service) {
-        return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+        return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       }
 
       const { FacebookSendService } = require('../../src/services/facebook/FacebookSendService');
 
-      // ── Timeout guard: prevent UI hanging forever ──────────────────────
-      // 15s cho hầu hết trường hợp, nếu group MQTT treo cũng không chờ quá lâu.
+      // â”€â”€ Timeout guard: prevent UI hanging forever â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // 15s cho háº§u háº¿t trÆ°á»ng há»£p, náº¿u group MQTT treo cÅ©ng khÃ´ng chá» quÃ¡ lÃ¢u.
       const TIMEOUT_MS = 15000;
       const result = (await Promise.race([
         FacebookSendService.sendTextMessage({
@@ -522,7 +522,7 @@ export function registerFacebookIpc(): void {
           replyToMessageId: params.options?.replyToMessageId,
         }),
         new Promise<any>((_, reject) =>
-          setTimeout(() => reject(new Error(`Gửi tin nhắn timeout sau ${TIMEOUT_MS / 1000}s. Vui lòng thử lại.`)), TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`Gá»­i tin nháº¯n timeout sau ${TIMEOUT_MS / 1000}s. Vui lÃ²ng thá»­ láº¡i.`)), TIMEOUT_MS)
         ),
       ])) as any;
 
@@ -534,7 +534,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Gửi attachment (C2: auto-route 1:1 qua E2EE)
+   * Gá»­i attachment (C2: auto-route 1:1 qua E2EE)
    */
   ipcMain.handle('fb:sendAttachment', async (_event, params: {
     accountId: string; threadId: string; filePath: string; body?: string; typeChat?: 'user' | null; fileType?: 'image' | 'video' | 'audio' | 'file';
@@ -543,9 +543,9 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
-      // C2: 1:1 → gửi qua E2EE bridge
+      // C2: 1:1 â†’ gá»­i qua E2EE bridge
       const isUserMessage = params.typeChat === 'user';
       if (isUserMessage) {
         if (!service.isE2EEConnected()) {
@@ -556,16 +556,16 @@ export function registerFacebookIpc(): void {
         if (!service.isE2EEConnected()) {
           return {
             success: false,
-            error: 'Không thể gửi file 1:1 trên Facebook: E2EE bridge chưa kết nối. ' +
-              'Build binary: clone mautrix/meta vào bridge-e2ee/, chạy go build, ' +
-              'hoặc set biến môi trường FBCHAT_E2EE_BIN',
+            error: 'KhÃ´ng thá»ƒ gá»­i file 1:1 trÃªn Facebook: E2EE bridge chÆ°a káº¿t ná»‘i. ' +
+              'Build binary: clone mautrix/meta vÃ o bridge-e2ee/, cháº¡y go build, ' +
+              'hoáº·c set biáº¿n mÃ´i trÆ°á»ng FBCHAT_E2EE_BIN',
           };
         }
 
         const { normalizeChatJid } = require('../../src/services/facebook/FacebookUtils');
         const chatJid = normalizeChatJid(params.threadId);
         const fileName = require('path').basename(params.filePath);
-        // Ưu tiên fileType hint từ renderer (voice recording gửi fileType='audio' để tránh nhầm .webm là video)
+        // Æ¯u tiÃªn fileType hint tá»« renderer (voice recording gá»­i fileType='audio' Ä‘á»ƒ trÃ¡nh nháº§m .webm lÃ  video)
         const isImage = params.fileType === 'image' || (!params.fileType && /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName));
         const isVideo = params.fileType === 'video' || (!params.fileType && /\.(mp4|webm|mov|avi)$/i.test(fileName));
         const isAudio = params.fileType === 'audio' || (!params.fileType && /\.(mp3|wav|ogg|m4a|aac|flac|wma)$/i.test(fileName));
@@ -583,7 +583,7 @@ export function registerFacebookIpc(): void {
 
         Logger.log(`[facebookIpc] fb:sendAttachment E2EE 1:1 FULL response: ${JSON.stringify(result)}`);
 
-        // Bridge does NOT echo self-sent messages → save message directly
+        // Bridge does NOT echo self-sent messages â†’ save message directly
         // with localPath to the original file so UI can display immediately
         if (result.success && result.messageId) {
           try {
@@ -605,7 +605,7 @@ export function registerFacebookIpc(): void {
             }
 
             // Save message to DB with localPath in attachments
-            // body = null for media messages — DB's saveFBMessage auto-generates displayContent
+            // body = null for media messages â€” DB's saveFBMessage auto-generates displayContent
             DatabaseService.getInstance().saveFBMessage({
               id: result.messageId,
               account_id: internalId,
@@ -667,7 +667,7 @@ export function registerFacebookIpc(): void {
 
       // Group: upload + send via REST (existing logic)
       const uploaded = await service.uploadAttachment(params.filePath);
-      if (!uploaded) return { success: false, error: 'Upload thất bại' };
+      if (!uploaded) return { success: false, error: 'Upload tháº¥t báº¡i' };
 
       const attachType = uploaded.attachmentType.startsWith('image') ? 'image'
         : uploaded.attachmentType.startsWith('video') ? 'video'
@@ -681,9 +681,9 @@ export function registerFacebookIpc(): void {
         ...(params.replyToMessageId ? { replyToMessageId: params.replyToMessageId } : {}),
       });
 
-      // E2EE error detection → retry via bridge. Handles case where typeChat was not set
+      // E2EE error detection â†’ retry via bridge. Handles case where typeChat was not set
       // but conversation is actually E2EE-encrypted 1:1.
-      if (!result.success && /disabled|vô hiệu hoá|encrypted/i.test(result.error || '')) {
+      if (!result.success && /disabled|vÃ´ hiá»‡u hoÃ¡|encrypted/i.test(result.error || '')) {
         Logger.warn(`[facebookIpc] fb:sendAttachment E2EE error detected, retrying via bridge for thread=${params.threadId}`);
         if (!service.isE2EEConnected()) {
           try { await service.retryE2EE(); } catch {}
@@ -708,10 +708,10 @@ export function registerFacebookIpc(): void {
       if (result.success && result.messageId) {
         try {
           const fileName = require('path').basename(params.filePath);
-          const bodyPreview = attachType === 'image' ? '🖼️ Hình ảnh'
-            : attachType === 'video' ? '🎬 Video'
-            : attachType === 'audio' ? '🎵 Audio'
-            : `📎 ${fileName}`;
+          const bodyPreview = attachType === 'image' ? 'ðŸ–¼ï¸ HÃ¬nh áº£nh'
+            : attachType === 'video' ? 'ðŸŽ¬ Video'
+            : attachType === 'audio' ? 'ðŸŽµ Audio'
+            : `ðŸ“Ž ${fileName}`;
           DatabaseService.getInstance().saveFBMessage({
             id: result.messageId,
             account_id: internalId,
@@ -742,7 +742,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Gửi nhiều ảnh/file cùng 1 request (batch attachments)
+   * Gá»­i nhiá»u áº£nh/file cÃ¹ng 1 request (batch attachments)
    */
   ipcMain.handle('fb:sendAttachments', async (_event, params: {
     accountId: string; threadId: string; filePaths: string[]; body?: string; typeChat?: 'user' | null;
@@ -751,9 +751,9 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
-      // C2: 1:1 → gửi qua E2EE bridge
+      // C2: 1:1 â†’ gá»­i qua E2EE bridge
       const isUserMessage = params.typeChat === 'user';
       if (isUserMessage) {
         if (!service.isE2EEConnected()) {
@@ -762,7 +762,7 @@ export function registerFacebookIpc(): void {
         if (!service.isE2EEConnected()) {
           return {
             success: false, uploadedCount: 0, totalCount: params.filePaths.length,
-            error: 'Không thể gửi file 1:1: E2EE bridge chưa kết nối.',
+            error: 'KhÃ´ng thá»ƒ gá»­i file 1:1: E2EE bridge chÆ°a káº¿t ná»‘i.',
           };
         }
 
@@ -772,7 +772,7 @@ export function registerFacebookIpc(): void {
         const results: Array<{ success: boolean; messageId?: string; timestamp?: number; filePath: string; fileName: string; isImage: boolean; isVideo: boolean; isAudio: boolean }> = [];
         let failCount = 0;
 
-        // Gửi từng file qua E2EE bridge, collect all results
+        // Gá»­i tá»«ng file qua E2EE bridge, collect all results
         for (const fp of params.filePaths) {
           const fileName = path.basename(fp);
           const isImage = /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName);
@@ -885,7 +885,7 @@ export function registerFacebookIpc(): void {
         .map((u, i) => u ? { uploaded: u, filePath: params.filePaths[i] } : null)
         .filter(Boolean) as Array<{ uploaded: any; filePath: string }>;
 
-      if (successful.length === 0) return { success: false, error: 'Tất cả upload thất bại' };
+      if (successful.length === 0) return { success: false, error: 'Táº¥t cáº£ upload tháº¥t báº¡i' };
 
       // 2. Send ONE message with all attachment IDs
       const attachmentIds = successful.map(({ uploaded }) => {
@@ -902,7 +902,7 @@ export function registerFacebookIpc(): void {
         ...(params.replyToMessageId ? { replyToMessageId: params.replyToMessageId } : {}),
       });
 
-      // 3. Save to DB — MQTT echo may have already inserted with partial attachments (race),
+      // 3. Save to DB â€” MQTT echo may have already inserted with partial attachments (race),
       //    so save first then force-UPDATE attachments to ensure all images are stored.
       if (result.success && result.messageId) {
         try {
@@ -919,7 +919,7 @@ export function registerFacebookIpc(): void {
             account_id: internalId,
             thread_id: params.threadId,
             sender_id: resolveRealFacebookId(internalId, service),
-            body: params.body || '🖼️ Hình ảnh',
+            body: params.body || 'ðŸ–¼ï¸ HÃ¬nh áº£nh',
             timestamp: result.timestamp || Date.now(),
             type: 'image',
             attachments: allAttachmentsJson,
@@ -943,7 +943,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Thu hồi tin nhắn
+   * Thu há»“i tin nháº¯n
    */
   ipcMain.handle('fb:unsendMessage', async (_event, params: {
     accountId: string; messageId: string;
@@ -951,7 +951,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       const result = await service.unsendMessage(params.messageId);
       if (result.success) {
         DatabaseService.getInstance().updateFBMessageUnsent(params.messageId);
@@ -971,7 +971,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
       let success = false;
 
@@ -983,7 +983,7 @@ export function registerFacebookIpc(): void {
           [params.messageId, internalId]) as any;
 
         if (msg?.thread_id) {
-          // Thread ID is numeric (all digits) = 1:1 E2EE chat → route via E2EE reaction
+          // Thread ID is numeric (all digits) = 1:1 E2EE chat â†’ route via E2EE reaction
           if (/^\d+$/.test(msg.thread_id)) {
             const { normalizeChatJid } = require('../../src/services/facebook/FacebookUtils');
             const chatJid = normalizeChatJid(msg.thread_id);
@@ -993,7 +993,7 @@ export function registerFacebookIpc(): void {
               if (result.success) success = true;
             } catch {}
           } else {
-            // Group message (non-numeric thread ID) — try bridge sendReaction
+            // Group message (non-numeric thread ID) â€” try bridge sendReaction
             try {
               const result = await service.sendBridgeReaction(msg.thread_id, params.messageId, params.emoji);
               if (result.success) success = true;
@@ -1024,7 +1024,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Chỉnh sửa nội dung tin nhắn đã gửi (I1)
+   * Chá»‰nh sá»­a ná»™i dung tin nháº¯n Ä‘Ã£ gá»­i (I1)
    */
   ipcMain.handle('fb:editMessage', async (_event, params: {
     accountId: string; messageId: string; text: string;
@@ -1032,7 +1032,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.editMessage(params.messageId, params.text);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1040,21 +1040,21 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy danh sách threads
+   * Láº¥y danh sÃ¡ch threads
    */
   ipcMain.handle('fb:getThreads', async (_event, params: {
     accountId: string; forceRefresh?: boolean;
   }) => {
     try {
       const internalId = resolveInternalId(params.accountId);
-      // Lấy từ DB trước (cache)
+      // Láº¥y tá»« DB trÆ°á»›c (cache)
       const cached = DatabaseService.getInstance().getFBThreads(internalId);
 
       if (!params.forceRefresh && cached.length > 0) {
         return { success: true, threads: cached };
       }
 
-      // Refresh từ Facebook API
+      // Refresh tá»« Facebook API
       const service = FacebookConnectionManager.get(internalId);
       if (service && service.isConnected()) {
         const threads = await service.getThreadList();
@@ -1071,7 +1071,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy messages từ DB local
+   * Láº¥y messages tá»« DB local
    */
   ipcMain.handle('fb:getMessages', async (_event, params: {
     accountId: string; threadId: string; limit?: number; offset?: number;
@@ -1088,7 +1088,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Đánh dấu đã đọc (C5: gửi lên Facebook server qua bridge)
+   * ÄÃ¡nh dáº¥u Ä‘Ã£ Ä‘á»c (C5: gá»­i lÃªn Facebook server qua bridge)
    */
   ipcMain.handle('fb:markAsRead', async (_event, params: {
     accountId: string; threadId: string;
@@ -1110,7 +1110,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Đổi tên nhóm
+   * Äá»•i tÃªn nhÃ³m
    */
   ipcMain.handle('fb:changeThreadName', async (_event, params: {
     accountId: string; threadId: string; name: string;
@@ -1118,7 +1118,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       const ok = await service.changeThreadName(params.threadId, params.name);
       return { success: ok };
     } catch (err: any) {
@@ -1127,7 +1127,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Đổi emoji nhóm
+   * Äá»•i emoji nhÃ³m
    */
   ipcMain.handle('fb:changeThreadEmoji', async (_event, params: {
     accountId: string; threadId: string; emoji: string;
@@ -1135,7 +1135,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       const ok = await service.changeThreadEmoji(params.threadId, params.emoji);
       return { success: ok };
     } catch (err: any) {
@@ -1144,7 +1144,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Đổi nickname thành viên
+   * Äá»•i nickname thÃ nh viÃªn
    */
   ipcMain.handle('fb:changeNickname', async (_event, params: {
     accountId: string; threadId: string; userId: string; nickname: string;
@@ -1152,7 +1152,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       const ok = await service.changeNickname(params.threadId, params.userId, params.nickname);
       return { success: ok };
     } catch (err: any) {
@@ -1161,7 +1161,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Đăng nhập bằng username/password
+   * ÄÄƒng nháº­p báº±ng username/password
    */
   ipcMain.handle('fb:loginWithCredentials', async (_event, params: {
     username: string; password: string; twoFASecret?: string;
@@ -1174,10 +1174,10 @@ export function registerFacebookIpc(): void {
     }
   });
 
-  // ─── E2EE Handlers ──────────────────────────────────────────────────────
+  // â”€â”€â”€ E2EE Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Gửi tin nhắn E2EE (1:1 encrypted)
+   * Gá»­i tin nháº¯n E2EE (1:1 encrypted)
    */
   ipcMain.handle('fb:sendE2EEMessage', async (_event, params: {
     accountId: string; chatJid: string; text: string; replyToId?: string; replyToSenderJid?: string;
@@ -1185,7 +1185,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
       const sender = service.getE2EESender();
       if (!sender) return { success: false, error: 'E2EE bridge not connected' };
@@ -1224,7 +1224,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Kiểm tra trạng thái E2EE bridge
+   * Kiá»ƒm tra tráº¡ng thÃ¡i E2EE bridge
    */
   ipcMain.handle('fb:getE2EEStatus', async (_event, params: {
     accountId: string;
@@ -1246,7 +1246,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Bật/tắt E2EE bridge thủ công
+   * Báº­t/táº¯t E2EE bridge thá»§ cÃ´ng
    */
   ipcMain.handle('fb:toggleE2EE', async (_event, params: {
     accountId: string; enable: boolean;
@@ -1254,10 +1254,10 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
       if (params.enable) {
-        // E2EE is auto-started during connect — manual reconnect nếu cần
+        // E2EE is auto-started during connect â€” manual reconnect náº¿u cáº§n
         await service.disconnect();
         await service.connect();
       }
@@ -1268,7 +1268,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Gửi typing indicator (C6)
+   * Gá»­i typing indicator (C6)
    */
   ipcMain.handle('fb:sendTyping', async (_event, params: {
     accountId: string; threadId: string; isTyping: boolean; isGroup?: boolean;
@@ -1276,18 +1276,18 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
       await service.sendTyping(params.threadId, params.isTyping, params.isGroup || false);
       return { success: true };
     } catch (err: any) {
-      // Typing is best-effort — no error returned
+      // Typing is best-effort â€” no error returned
       return { success: true };
     }
   });
 
   /**
-   * Gửi seen/delivered receipt (C5)
+   * Gá»­i seen/delivered receipt (C5)
    */
   ipcMain.handle('fb:sendSeen', async (_event, params: {
     accountId: string; threadId: string;
@@ -1295,7 +1295,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
 
       await service.markReadOnServer(params.threadId);
       return { success: true };
@@ -1305,7 +1305,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Chuyển tiếp tin nhắn (I2)
+   * Chuyá»ƒn tiáº¿p tin nháº¯n (I2)
    */
   ipcMain.handle('fb:forwardMessage', async (_event, params: {
     accountId: string; messageId: string; targetThreadId: string; isGroup?: boolean;
@@ -1313,7 +1313,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.forwardMessage(params.messageId, params.targetThreadId, params.isGroup || false);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1321,7 +1321,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Ghim tin nhắn (I3)
+   * Ghim tin nháº¯n (I3)
    */
   ipcMain.handle('fb:pinMessage', async (_event, params: {
     accountId: string; messageId: string; threadId: string;
@@ -1329,7 +1329,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.pinMessage(params.messageId, params.threadId);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1337,7 +1337,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Bỏ ghim tin nhắn (I3)
+   * Bá» ghim tin nháº¯n (I3)
    */
   ipcMain.handle('fb:unpinMessage', async (_event, params: {
     accountId: string; messageId: string; threadId: string;
@@ -1345,7 +1345,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.unpinMessage(params.messageId, params.threadId);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1353,7 +1353,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Tạo poll (I6)
+   * Táº¡o poll (I6)
    */
   ipcMain.handle('fb:createPoll', async (_event, params: {
     accountId: string; threadId: string; question: string; options: string[];
@@ -1361,7 +1361,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.createPoll(params.threadId, params.question, params.options);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1369,7 +1369,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Bỏ phiếu poll (I6)
+   * Bá» phiáº¿u poll (I6)
    */
   ipcMain.handle('fb:votePoll', async (_event, params: {
     accountId: string; pollId: string; optionIds: string[];
@@ -1377,7 +1377,7 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       return await service.votePoll(params.pollId, params.optionIds);
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -1385,9 +1385,9 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Fetch tin nhắn lịch sử từ Facebook API (C7)
-   * Khác với fb:getMessages (đọc từ DB local), cái này gọi API GraphQL
-   * Tự động lưu tin nhắn fetch được vào DB để dùng offline.
+   * Fetch tin nháº¯n lá»‹ch sá»­ tá»« Facebook API (C7)
+   * KhÃ¡c vá»›i fb:getMessages (Ä‘á»c tá»« DB local), cÃ¡i nÃ y gá»i API GraphQL
+   * Tá»± Ä‘á»™ng lÆ°u tin nháº¯n fetch Ä‘Æ°á»£c vÃ o DB Ä‘á»ƒ dÃ¹ng offline.
    */
   ipcMain.handle('fb:fetchThreadMessages', async (_event, params: {
     accountId: string; threadId: string; limit?: number; beforeCursor?: string | null;
@@ -1395,9 +1395,9 @@ export function registerFacebookIpc(): void {
     try {
       const internalId = resolveInternalId(params.accountId);
       const service = await getFBServiceOrReconnect(internalId);
-      if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
       const result = await service.fetchThreadMessages(params.threadId, params.limit, params.beforeCursor);
-      // Lưu tin nhắn vào DB để dùng offline
+      // LÆ°u tin nháº¯n vÃ o DB Ä‘á»ƒ dÃ¹ng offline
       if (result.success && result.messages?.length) {
         const db = DatabaseService.getInstance();
         for (const msg of result.messages) {
@@ -1425,10 +1425,10 @@ export function registerFacebookIpc(): void {
     }
   });
 
-  // ─── Scan Data Handlers ─────────────────────────────────────────────────
+  // â”€â”€â”€ Scan Data Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Quét thành viên nhóm Facebook
+   * QuÃ©t thÃ nh viÃªn nhÃ³m Facebook
    */
   ipcMain.handle('fb:scanGroupMembers', async (_event, params: {
     accountId: string; groupId: string; cursor?: string | null;
@@ -1445,7 +1445,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét nhóm theo từ khóa
+   * QuÃ©t nhÃ³m theo tá»« khÃ³a
    */
   ipcMain.handle('fb:scanGroupKeyword', async (_event, params: {
     accountId: string; keyword: string; cursor?: string | null; filters?: string[]; bsid?: string; tsid?: string;
@@ -1462,7 +1462,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét fanpage theo từ khóa
+   * QuÃ©t fanpage theo tá»« khÃ³a
    */
   ipcMain.handle('fb:scanFanpageKeyword', async (_event, params: {
     accountId: string; keyword: string; cursor?: string | null; filters?: string[]; bsid?: string; tsid?: string;
@@ -1479,7 +1479,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét bình luận bài viết
+   * QuÃ©t bÃ¬nh luáº­n bÃ i viáº¿t
    */
   ipcMain.handle('fb:scanPostComments', async (_event, params: {
     accountId: string; postId: string; cursor?: string | null;
@@ -1496,7 +1496,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét bài viết theo từ khóa
+   * QuÃ©t bÃ i viáº¿t theo tá»« khÃ³a
    */
   ipcMain.handle('fb:scanPostKeyword', async (_event, params: {
     accountId: string; keyword: string; cursor?: string | null; filters?: string[]; bsid?: string; tsid?: string;
@@ -1513,7 +1513,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét bài đăng từ timeline profile/fanpage/group
+   * QuÃ©t bÃ i Ä‘Äƒng tá»« timeline profile/fanpage/group
    */
   ipcMain.handle('fb:scanPostTimeline', async (_event, params: {
     accountId: string; sourceId: string; sourceType: 'profile' | 'fanpage' | 'group'; cursor?: string | null;
@@ -1532,10 +1532,10 @@ export function registerFacebookIpc(): void {
   /**
    * Reset scan cache (clear context + docId cache)
    */
-  // ─── Batch Scan Handlers ─────────────────────────────────────────────
+  // â”€â”€â”€ Batch Scan Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Quét thành viên nhiều nhóm cùng lúc (batch)
+   * QuÃ©t thÃ nh viÃªn nhiá»u nhÃ³m cÃ¹ng lÃºc (batch)
    */
   ipcMain.handle('fb:scanGroupMembersBatch', async (_event, params: {
     accountId: string; groupIds: string[]; threadCount?: number;
@@ -1552,7 +1552,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Quét bình luận nhiều bài viết cùng lúc (batch)
+   * QuÃ©t bÃ¬nh luáº­n nhiá»u bÃ i viáº¿t cÃ¹ng lÃºc (batch)
    */
   ipcMain.handle('fb:scanPostCommentsBatch', async (_event, params: {
     accountId: string; postIds: string[]; threadCount?: number;
@@ -1568,10 +1568,10 @@ export function registerFacebookIpc(): void {
     }
   });
 
-  // ─── Scan Log Handlers ───────────────────────────────────────────────
+  // â”€â”€â”€ Scan Log Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Lưu 1 entry scan history
+   * LÆ°u 1 entry scan history
    */
   ipcMain.handle('fb:saveScanLog', async (_event, params: {
     accountId: string; tabId?: string; tabName?: string; scanType: string; input: string;
@@ -1608,7 +1608,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy lịch sử scan
+   * Láº¥y lá»‹ch sá»­ scan
    */
   ipcMain.handle('fb:getScanLogs', async (_event, params: {
     accountId: string; tabId?: string; limit?: number; offset?: number;
@@ -1634,10 +1634,10 @@ export function registerFacebookIpc(): void {
     }
   });
 
-  // ─── Scan Tab Handlers ────────────────────────────────────────────────
+  // â”€â”€â”€ Scan Tab Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
-   * Lưu/cập nhật tab
+   * LÆ°u/cáº­p nháº­t tab
    */
   ipcMain.handle('fb:scanSaveTab', async (_event, params: {
     id: string; accountId: string; name: string; scanType: string;
@@ -1667,7 +1667,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy danh sách tabs
+   * Láº¥y danh sÃ¡ch tabs
    */
   ipcMain.handle('fb:scanGetTabs', async (_event, params: {
     accountId: string; status?: string; limit?: number; offset?: number;
@@ -1683,7 +1683,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy 1 tab
+   * Láº¥y 1 tab
    */
   ipcMain.handle('fb:scanGetTab', async (_event, params: { id: string }) => {
     try {
@@ -1696,7 +1696,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Cập nhật trạng thái tab (active/archived/deleted)
+   * Cáº­p nháº­t tráº¡ng thÃ¡i tab (active/archived/deleted)
    */
   ipcMain.handle('fb:scanUpdateTabStatus', async (_event, params: { id: string; status: string }) => {
     try {
@@ -1709,7 +1709,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Xoá hẳn tab + data + request logs
+   * XoÃ¡ háº³n tab + data + request logs
    */
   ipcMain.handle('fb:scanDeleteTab', async (_event, params: { id: string }) => {
     try {
@@ -1722,7 +1722,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Cập nhật updated_at cho tab (đẩy lên đầu danh sách)
+   * Cáº­p nháº­t updated_at cho tab (Ä‘áº©y lÃªn Ä‘áº§u danh sÃ¡ch)
    */
   ipcMain.handle('fb:scanTouchTab', async (_event, params: { id: string }) => {
     try {
@@ -1735,7 +1735,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lưu data cho tab
+   * LÆ°u data cho tab
    */
   ipcMain.handle('fb:scanSaveTabData', async (_event, params: {
     tabId: string; items: any[]; pageInfo: { endCursor: string | null; hasNextPage: boolean };
@@ -1750,7 +1750,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy data đã lưu cho tab (items + pageInfo từ lần scan gần nhất)
+   * Láº¥y data Ä‘Ã£ lÆ°u cho tab (items + pageInfo tá»« láº§n scan gáº§n nháº¥t)
    */
   ipcMain.handle('fb:scanGetTabData', async (_event, params: { tabId: string }) => {
     try {
@@ -1771,7 +1771,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lưu request log cho tab
+   * LÆ°u request log cho tab
    */
   ipcMain.handle('fb:scanSaveRequestLog', async (_event, params: {
     tabId: string; requestPayload: string; responsePreview: string;
@@ -1794,7 +1794,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Lấy request logs của tab
+   * Láº¥y request logs cá»§a tab
    */
   ipcMain.handle('fb:scanGetRequestLogs', async (_event, params: { tabId: string; limit?: number; offset?: number }) => {
     try {
@@ -1807,7 +1807,7 @@ export function registerFacebookIpc(): void {
   });
 
   /**
-   * Thống kê scan
+   * Thá»‘ng kÃª scan
    */
   ipcMain.handle('fb:scanGetStats', async (_event, params: { accountId: string }) => {
     try {
@@ -1821,18 +1821,17 @@ export function registerFacebookIpc(): void {
   });
 
   Logger.log('[facebookIpc] All handlers registered');
-}
 
-/**
- * Block người dùng (N4)
- */
-ipcMain.handle('fb:blockUser', async (_event, params: {
+  /**
+   * Block ngÆ°á»i dÃ¹ng (N4)
+   */
+  ipcMain.handle('fb:blockUser', async (_event, params: {
   accountId: string; userId: string;
 }) => {
   try {
     const internalId = resolveInternalId(params.accountId);
     const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
+    if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
     return await service.blockUser(params.userId);
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -1840,156 +1839,157 @@ ipcMain.handle('fb:blockUser', async (_event, params: {
 });
 
 /**
- * Unblock người dùng (N4)
+ * Unblock ngÆ°á»i dÃ¹ng (N4)
  */
-ipcMain.handle('fb:unblockUser', async (_event, params: {
-  accountId: string; userId: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.unblockUser(params.userId);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
+  ipcMain.handle('fb:unblockUser', async (_event, params: {
+    accountId: string; userId: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.unblockUser(params.userId);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Äá»•i theme há»™i thoáº¡i (N1)
+   */
+  ipcMain.handle('fb:changeThreadTheme', async (_event, params: {
+    accountId: string; threadId: string; theme: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.changeThreadTheme(params.threadId, params.theme);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Táº¡o Messenger Note (N2)
+   */
+  ipcMain.handle('fb:createNote', async (_event, params: {
+    accountId: string; text: string; backgroundColor?: string; textColor?: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.createNote(params.text, params.backgroundColor, params.textColor);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  // â”€â”€â”€ N3: Group Admin Operations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  
+  /**
+   * ThÃªm admin nhÃ³m (N3)
+   */
+  ipcMain.handle('fb:addGroupAdmin', async (_event, params: {
+    accountId: string; threadId: string; userId: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.addGroupAdmin(params.threadId, params.userId);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * XÃ³a admin nhÃ³m (N3)
+   */
+  ipcMain.handle('fb:removeGroupAdmin', async (_event, params: {
+    accountId: string; threadId: string; userId: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.removeGroupAdmin(params.threadId, params.userId);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Báº­t/táº¯t duyá»‡t thÃ nh viÃªn (N3)
+   */
+  ipcMain.handle('fb:changeApprovalMode', async (_event, params: {
+    accountId: string; threadId: string; approved: boolean;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.changeApprovalMode(params.threadId, params.approved);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Duyá»‡t/tá»« chá»‘i thÃ nh viÃªn (N3)
+   */
+  ipcMain.handle('fb:approvePendingMember', async (_event, params: {
+    accountId: string; threadId: string; userId: string; approve: boolean;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.approvePendingMember(params.threadId, params.userId, params.approve);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Láº¥y link má»i nhÃ³m (N3)
+   */
+  ipcMain.handle('fb:getGroupLink', async (_event, params: {
+    accountId: string; threadId: string;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.getGroupLink(params.threadId);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+  
+  /**
+   * Báº­t/táº¯t link má»i nhÃ³m (N3)
+   */
+  ipcMain.handle('fb:setGroupLink', async (_event, params: {
+    accountId: string; threadId: string; enable: boolean;
+  }) => {
+    try {
+      const internalId = resolveInternalId(params.accountId);
+      const service = await getFBServiceOrReconnect(internalId);
+      if (!service) return { success: false, error: 'TÃ i khoáº£n chÆ°a káº¿t ná»‘i. Vui lÃ²ng káº¿t ná»‘i láº¡i Facebook.' };
+      return await service.setGroupLink(params.threadId, params.enable);
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+    });
+}
 
 /**
- * Đổi theme hội thoại (N1)
- */
-ipcMain.handle('fb:changeThreadTheme', async (_event, params: {
-  accountId: string; threadId: string; theme: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.changeThreadTheme(params.threadId, params.theme);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Tạo Messenger Note (N2)
- */
-ipcMain.handle('fb:createNote', async (_event, params: {
-  accountId: string; text: string; backgroundColor?: string; textColor?: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.createNote(params.text, params.backgroundColor, params.textColor);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-// ─── N3: Group Admin Operations ─────────────────────────────────────────────
-
-/**
- * Thêm admin nhóm (N3)
- */
-ipcMain.handle('fb:addGroupAdmin', async (_event, params: {
-  accountId: string; threadId: string; userId: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.addGroupAdmin(params.threadId, params.userId);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Xóa admin nhóm (N3)
- */
-ipcMain.handle('fb:removeGroupAdmin', async (_event, params: {
-  accountId: string; threadId: string; userId: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.removeGroupAdmin(params.threadId, params.userId);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Bật/tắt duyệt thành viên (N3)
- */
-ipcMain.handle('fb:changeApprovalMode', async (_event, params: {
-  accountId: string; threadId: string; approved: boolean;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.changeApprovalMode(params.threadId, params.approved);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Duyệt/từ chối thành viên (N3)
- */
-ipcMain.handle('fb:approvePendingMember', async (_event, params: {
-  accountId: string; threadId: string; userId: string; approve: boolean;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.approvePendingMember(params.threadId, params.userId, params.approve);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Lấy link mời nhóm (N3)
- */
-ipcMain.handle('fb:getGroupLink', async (_event, params: {
-  accountId: string; threadId: string;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.getGroupLink(params.threadId);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Bật/tắt link mời nhóm (N3)
- */
-ipcMain.handle('fb:setGroupLink', async (_event, params: {
-  accountId: string; threadId: string; enable: boolean;
-}) => {
-  try {
-    const internalId = resolveInternalId(params.accountId);
-    const service = await getFBServiceOrReconnect(internalId);
-    if (!service) return { success: false, error: 'Tài khoản chưa kết nối. Vui lòng kết nối lại Facebook.' };
-    return await service.setGroupLink(params.threadId, params.enable);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-});
-
-/**
- * Auto-reconnect tất cả FB accounts khi app khởi động.
- * - Bỏ qua account đã connected
- * - Test cookie health trước khi connect
- * - Nếu cookie expired → bỏ qua (không thử)
+ * Auto-reconnect táº¥t cáº£ FB accounts khi app khá»Ÿi Ä‘á»™ng.
+ * - Bá» qua account Ä‘Ã£ connected
+ * - Test cookie health trÆ°á»›c khi connect
+ * - Náº¿u cookie expired â†’ bá» qua (khÃ´ng thá»­)
  */
 export async function reconnectAllFBAccounts(): Promise<void> {
   try {
@@ -1997,7 +1997,7 @@ export async function reconnectAllFBAccounts(): Promise<void> {
     Logger.log(`[facebookIpc] reconnectAllFBAccounts: ${accounts.length} FB accounts found`);
     for (const acc of accounts) {
       try {
-        // Bỏ qua account đã connected
+        // Bá» qua account Ä‘Ã£ connected
         const existing = FacebookConnectionManager.get(acc.id);
         if (existing && existing.isConnected()) {
           Logger.log(`[facebookIpc] reconnectAllFBAccounts ${acc.id}: already connected, skipping`);
@@ -2010,7 +2010,7 @@ export async function reconnectAllFBAccounts(): Promise<void> {
           continue;
         }
 
-        // Test cookie health trước khi connect
+        // Test cookie health trÆ°á»›c khi connect
         try {
           const { checkCookieAlive } = require('../../src/services/facebook/FacebookSession');
           const alive = await checkCookieAlive(cookie);
@@ -2022,7 +2022,7 @@ export async function reconnectAllFBAccounts(): Promise<void> {
           Logger.warn(`[facebookIpc] reconnectAllFBAccounts ${acc.id}: health check failed: ${healthErr.message}, trying anyway`);
         }
 
-        // Đọc proxy_id từ unified accounts table
+        // Äá»c proxy_id tá»« unified accounts table
         let proxyId: number | null | undefined;
         try {
           const accRow = DatabaseService.getInstance().queryOne<any>('SELECT proxy_id FROM accounts WHERE zalo_id = ?', [acc.facebook_id || acc.id]);
@@ -2030,7 +2030,7 @@ export async function reconnectAllFBAccounts(): Promise<void> {
         } catch { proxyId = null; }
 
         const service = await FacebookConnectionManager.getOrCreate(acc.id, cookie, proxyId);
-        // Reset retry count sau khi connect thành công
+        // Reset retry count sau khi connect thÃ nh cÃ´ng
         if (service.isConnected()) {
           service.resetListenerRetryCount?.();
         }

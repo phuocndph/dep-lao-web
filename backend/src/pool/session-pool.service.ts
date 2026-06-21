@@ -118,6 +118,15 @@ export class SessionPoolService {
     return [...this.sessions.values()]
   }
 
+  getSession(accountId: string): SessionRecord | undefined {
+    return this.sessions.get(accountId)
+  }
+
+  hasWorker(accountId: string): boolean {
+    const proc = this.processes.get(accountId)
+    return !!proc && !proc.killed
+  }
+
   // ── Fork ──────────────────────────────────────────────────────────────────
 
   private spawnWorker(
@@ -204,6 +213,22 @@ export class SessionPoolService {
 
       case 'MESSAGE_INCOMING':
         await this.redisPub.publish('zalo:messages', JSON.stringify({ accountId, workerId: session.workerId, message: event.payload }))
+        // Auto-create/update contact from sender of incoming user messages
+        if (event.payload.threadType === 'user' && event.payload.fromUserId) {
+          const tenantId = await this.redis.get(`tenant:${accountId}`)
+          if (tenantId) {
+            this.prisma.contact.upsert({
+              where: { tenantId_zaloUid: { tenantId, zaloUid: event.payload.fromUserId } },
+              create: {
+                tenantId,
+                zaloUid: event.payload.fromUserId,
+                displayName: event.payload.senderName ?? event.payload.fromUserId,
+                source: 'zalo_friend',
+              },
+              update: event.payload.senderName ? { displayName: event.payload.senderName } : {},
+            }).catch(() => {})
+          }
+        }
         break
 
       case 'DISCONNECTED':

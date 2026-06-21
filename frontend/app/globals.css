@@ -1,4 +1,9 @@
 @import "tailwindcss";
+@source "../deplao-ui/**/*.{ts,tsx,js,jsx}";
+@source "../components/**/*.{ts,tsx,js,jsx}";
+@source "../stores/**/*.{ts,tsx,js,jsx}";
+@source "../hooks/**/*.{ts,tsx,js,jsx}";
+@source "../lib/**/*.{ts,tsx,js,jsx}";
 
 :root {
   --background: #ffffff;
